@@ -1,0 +1,95 @@
+<?php
+
+/**
+ * Implement hook_install
+ */
+function api_custom_install(){
+  api_custom_update_7002();
+  api_custom_update_7003();
+  api_custom_update_7004();
+}
+
+/*
+ * Set 'moodle_connector_url' variable
+ */
+function api_custom_update_7000(){
+  global $base_url;
+  variable_set('moodle_connector_url', $base_url . '/eplatform');
+  
+  return array(
+      'success' => TRUE,
+      'query' => 'The variable was set with the value' . variable_get('moodle_connector_url','') );
+}
+
+/*
+ * Set 'moodle_iframe_url' variable
+ */
+function api_custom_update_7001(){
+  global $base_url;
+  variable_set('moodle_iframe_url', $base_url . '/platform');
+  
+  return array(
+      'success' => TRUE,
+      'query' => 'The variable was set with the value' . variable_get('moodle_iframe_url','') );
+}
+
+/**
+ * Create the 'remote' user to be used in Moodle SSO.
+ */
+function api_custom_update_7002(){
+  $rid = array_search('service-authentication', user_roles());
+  
+  $account = array(
+      'name' => 'remote',
+      'pass' => 'remote',
+      'mail' => 'remote@worksafe.org',
+      'init' => 'remote@worksafe.org',
+      'roles' => array(
+          $rid => 'service-authentication'
+      ),
+      'status' => 1
+  );
+  user_save(null, $account);
+  
+  return array(
+      'success' => TRUE,
+      'query' => 'The user remote was created' );
+}
+
+/**
+ * Enable new worksafe theme.
+ */
+function api_custom_update_7003() {
+  theme_enable(array('worksafe'));
+  
+  return array(
+    'success' => TRUE,
+    'query' => 'worksafe theme is enabled and ready to be set.'
+  );
+}
+
+/**
+ * Make api_custom heavier than node to be able to set form_state['redirect'] on program creation/edition.
+ */
+function api_custom_update_7004() {
+   $rec = db_update('system')
+          ->fields(array('weight' => 1))
+          ->condition('type', 'module')
+          ->condition('name', 'api_custom')
+          ->execute();
+   
+   if (!empty($rec)) {
+     $ret = array(
+       'success' => TRUE,
+       'query' => 'api_custom weight set correctly.',
+     );
+   }
+   else {
+     $ret = array(
+       'success' => FALSE,
+       'query' => 'There was a problem setting api_custom weight',
+     );
+   }
+   
+   return $ret;
+}

@@ -1,0 +1,613 @@
+<?php
+
+/** @var string to identify the in progress state. */
+define('IN_PROGRESS','inprogress');
+/** @var string to identify the overdue state. */
+define('OVERDUE','overdue');
+/** @var string to identify the finished state. */
+define('FINISHED','finished');
+/** @var string to identify the abandoned state. */
+define('ABANDONED','abandoned');
+/** @var string to identify the restored state. */
+define('RESTORED','restored');
+/*
+ * Implement hook_menu
+ */
+function api_course_menu() {
+  $items['courses/training/%/%/%/%/%'] = array(
+    'title' => 'Take a training',
+    'page callback' => 'api_course_training',
+    'page arguments' => array(2,3,4,5,6),
+    'access callback' => 'api_course_check_access_page',
+    'access arguments' => array(2,3,4,5,6),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 0,
+  );
+  $items['courses/quiz/%/%/%/%/%'] = array(
+    'title' => 'Take a Quiz',
+    'page callback' => 'api_course_quiz',
+    'page arguments' => array(2,3,4,5,6),
+    'access callback' => 'api_course_check_access_page',
+    'access arguments' => array(2,3,4,5,6),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 0,
+  );
+  $items['courses/finalexam/%/%/%/%/%'] = array(
+    'title' => 'Take a Final Exam',
+    'page callback' => 'api_course_quiz',
+    'page arguments' => array(2,3,4,5,6),
+    'access callback' => 'api_course_check_access_page',
+    'access arguments' => array(2,3,4,5,6),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 0,
+  );
+  $items['courses/event/%user/%/%/%'] = array(
+    'title'            => 'Moodle Events',
+    'page callback'    => 'api_course_moodle_events',
+    'page arguments'   => array(2,3,4,5),
+    'access callback' => TRUE,
+  );
+  $items['courses/unblock/quiz/%user/%'] = array(
+    'title'            => 'Unblock quiz or final exam',
+    'page callback'    => 'api_course_unblock_quiz_attempt',
+    'page arguments'   => array(3,4),
+    'access callback' => 'api_course_check_access_unblock_quiz_attempt',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 0,
+  );
+  $items['admin/config/course/settings'] = array(
+    'title'            => 'Courses settings',
+    'description'      => 'Set Courses settings.',
+    'page callback'    => 'drupal_get_form',
+    'page arguments'   => array('api_course_admin_settings'),
+    'access arguments' => array('administer course settings'),
+    'file'             => 'api_course.admin.inc',
+  );
+  return $items;
+}
+
+function api_course_check_access_page($uid, $program_id, $state, $operator_type, $course_id){
+  global $user;
+  $username = $user->name;
+
+  $enrollment_info = api_moodle_get_enrollment_info($course_id,$username);
+  $current_time = time();
+
+  if ($enrollment_info && ($enrollment_info->timeend == 0 || $enrollment_info->timeend > $current_time)){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+function api_course_check_access_unblock_quiz_attempt(){
+  global $user;
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles) || in_array(ADMIN_ROLE, $user->roles)) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
+
+function api_course_training($uid, $program_id, $state, $operator_type, $course_id) {
+  global $user;
+
+  $operator_type = $operator_type == 'A B' ? 'A+B':$operator_type;
+
+  if (user_access('view program pages') || $user->uid == $uid) {
+
+    if ($state == 'NA' && $operator_type == 'NA'){
+      $title = api_moodle_get_program_name($program_id);
+    } else {
+      $states = _api_custom_get_us_states();
+      $title = api_moodle_get_program_name($program_id) . ', ' . $states[$state] . ' - ' . t('Class') . ' ' . $operator_type;
+    }
+    drupal_set_title($title);
+
+    $module_name = api_course_get_module_name($uid, $program_id, $state, $operator_type, $course_id);
+    $modules = api_course_get_modules_list($uid, $program_id, $state, $operator_type);
+
+    drupal_add_js(drupal_get_path('module', 'api_course') . '/js/jquery.iframe-auto-height.plugin.js');
+    drupal_add_js(drupal_get_path('module', 'api_course') . '/js/api_course.js');
+    $course_url = url(api_moodle_course_link($course_id));
+    $current_module = api_course_get_current_module_from_course($course_id,$modules);
+
+    // Get the Quiz for the current training
+    if ($modules[$current_module][MOODLE_COURSE_TYPE_QUIZ] && $modules[$current_module][MOODLE_COURSE_TYPE_QUIZ]->course_id){
+      $quiz_course_id = $modules[$current_module][MOODLE_COURSE_TYPE_QUIZ]->course_id;
+    } else {
+      $quiz_course_id = 0;
+    }
+
+    $back_course_link = api_course_back_course_link(t('Back to Course'), $uid, $program_id, $state, $operator_type);
+    $quiz_course_link = api_course_quiz_course_link(t('Take the Quiz'), $uid, $program_id, $state, $operator_type, $quiz_course_id);
+
+    $next_module_number = api_course_get_next_module_number($course_id, $modules);
+
+    if ($next_module_number){
+      $next_course_id = $modules[$next_module_number][MOODLE_COURSE_TYPE_TRAINING]->course_id;
+    } else {
+      $next_course_id = 0;
+    }
+
+    $next_module_link = api_course_next_module_link(t('Next Module'), $uid, $program_id, $state, $operator_type, $next_course_id);
+
+    return theme('courses_training_page', array(
+      'module_name' => $module_name,
+      'current_module' => $current_module,
+      'count_modules' => count($modules),
+      'back_course_link' => $back_course_link,
+      'course_url' => $course_url,
+      'quiz_course_link' => $quiz_course_link,
+      'next_module_link' => $next_module_link
+      )
+    );
+
+  } else {
+    drupal_access_denied();
+  }
+}
+
+function api_course_quiz($uid, $program_id, $state, $operator_type, $course_id) {
+  global $user;
+
+  $operator_type = $operator_type == 'A B' ? 'A+B':$operator_type;
+
+  if (user_access('view program pages') || $user->uid == $uid) {
+
+    if ($state == 'NA' && $operator_type == 'NA'){
+      $title = api_moodle_get_program_name($program_id);
+    } else {
+      $states = _api_custom_get_us_states();
+      $title = api_moodle_get_program_name($program_id) . ', ' . $states[$state] . ' - ' . t('Class') . ' ' . $operator_type;
+    }
+    drupal_set_title($title);
+
+    $module_name = api_course_get_module_name($uid, $program_id, $state, $operator_type, $course_id);
+    $modules = api_course_get_modules_list($uid, $program_id, $state, $operator_type);
+
+    $output = '';
+    drupal_add_js(drupal_get_path('module', 'api_course') . '/js/jquery.iframe-auto-height.plugin.js');
+    drupal_add_js(drupal_get_path('module', 'api_course') . '/js/api_course.js');
+    $course_url = url(api_moodle_course_link($course_id));
+    $output .= '<iframe src="' . $course_url . '" width="100%" class="autoresize scrolling="no""></iframe>';
+
+    return $output;
+
+  } else {
+    drupal_access_denied();
+  }
+}
+
+function api_course_get_next_module_number($course_id, $modules = array()){
+  $current_module = api_course_get_current_module_from_course($course_id, $modules);
+
+  $keys = array_keys($modules);
+  return $keys[array_search($current_module,$keys)+1];
+}
+
+function api_course_get_module_name($uid, $program_id, $state, $operator_type, $course_id){
+  $purchased_items = api_moodle_user_get_purchased_items($uid, $program_id, $state, $operator_type);
+
+  foreach ($purchased_items as $product_id => $item) {
+    if ($item->enrollment_info->id == $course_id){
+      $products_entity = entity_load('commerce_product', array($product_id),array('status'=>1));
+      return $products_entity[$product_id]->title;
+    }
+  }
+
+  return '';
+}
+
+function api_course_get_current_module_from_course($course_id, $modules = array()){
+  $mod_number = 0;
+  foreach($modules as $module){
+    $mod_number++;
+    if ($module[MOODLE_COURSE_TYPE_TRAINING]->course_id == $course_id){
+      return $mod_number;
+    }
+  }
+  return 0;
+}
+
+function api_course_get_course_params($course_id){
+  $moodle_con = moodle_connector_connect();
+
+  if (!$moodle_con) {
+    return FALSE;
+  }
+
+  $query = $moodle_con->select('course','c');
+  $query->condition('c.id', $course_id, '=');
+  $query->addField('c', 'idnumber');
+  $course_idnumber = $query->execute()->fetchField();
+
+  if ($course_idnumber){
+    $query = db_select('commerce_product', 'c');
+    $query->condition('c.sku', '%'.$course_idnumber.'%', 'LIKE');
+    $query->leftJoin('field_data_field_states', 's', 's.entity_id = c.product_id AND s.entity_type = :entity_type',array(':entity_type' => 'commerce_product'));
+    $query->leftJoin('field_data_field_operator_types', 't', 't.entity_id = c.product_id AND t.entity_type = :entity_type2',array(':entity_type2' => 'commerce_product'));
+    $query->join('field_data_field_product', 'p', 'p.field_product_product_id = c.product_id AND p.bundle = :bundle',array(':bundle' => 'product_display'));
+    $query->join('field_data_field_course_type', 'ct', 'ct.entity_id = c.product_id AND ct.entity_type = :entity_type3',array(':entity_type3' => 'commerce_product'));
+    $query->addField('c', 'product_id');
+    $query->addField('s', 'field_states_value', 'state');
+    $query->addField('t', 'field_operator_types_value', 'type');
+    $query->addField('p', 'entity_id', 'program_id');
+    $query->addField('ct', 'field_course_type_value', 'course_type');
+    $result = $query->execute()->fetchObject();
+
+    if ($result){
+        $result->state = $result->state ? $result->state:'NA';
+        $result->type = $result->type ? $result->type:'NA';
+    }
+    return $result;
+  }
+  return FALSE;
+}
+
+function api_course_get_related_course($uid, $program_id, $state, $operator_type, $course_id){
+  $modules = api_course_get_modules_list($uid, $program_id, $state, $operator_type);
+  foreach($modules as $module){
+    if ($module[MOODLE_COURSE_TYPE_TRAINING]->course_id == $course_id){
+      return $module[MOODLE_COURSE_TYPE_QUIZ]->course_id ? $module[MOODLE_COURSE_TYPE_QUIZ]->course_id:FALSE;
+    } else if ($module[MOODLE_COURSE_TYPE_QUIZ]->course_id == $course_id){
+      return $module[MOODLE_COURSE_TYPE_TRAINING]->course_id ? $module[MOODLE_COURSE_TYPE_TRAINING]->course_id:FALSE;
+    }
+  }
+  return FALSE;
+}
+
+function api_course_get_modules_list($uid, $program_id, $state = 'NA', $operator_type = 'NA'){
+  $program = api_moodle_get_program($program_id);
+  $program->modules[$state][$operator_type] = api_programs_get_program_courses($program_id, $state, $operator_type, $program);
+
+  $modules = array();
+
+  if (!$program){
+    return $modules;
+  }
+
+  $program->availables = array();
+  $user_purchased_items = api_moodle_user_get_purchased_items($uid,$program_id, $state, $operator_type);
+
+  foreach($program->modules[$state][$operator_type] as $mod_number => $module){
+    if ($module[MOODLE_COURSE_TYPE_TRAINING] && array_key_exists($module[MOODLE_COURSE_TYPE_TRAINING]->product_id, $user_purchased_items)){
+      $modules[$mod_number][MOODLE_COURSE_TYPE_TRAINING] = $module[MOODLE_COURSE_TYPE_TRAINING];
+    }
+    if ($module[MOODLE_COURSE_TYPE_QUIZ] && array_key_exists($module[MOODLE_COURSE_TYPE_QUIZ]->product_id, $user_purchased_items)){
+      $modules[$mod_number][MOODLE_COURSE_TYPE_QUIZ] = $module[MOODLE_COURSE_TYPE_QUIZ];
+    }
+  }
+
+  return $modules;
+}
+
+function api_course_back_course_link($text, $uid, $program_id, $state, $operator_type){
+  return l($text,'course/' . $uid . '/' . $program_id . '/' . $state . '/' . $operator_type);
+}
+
+function api_course_quiz_course_link($text, $uid, $program_id, $state, $operator_type, $course_id){
+  if ($course_id){
+    return l($text,'courses/quiz/' . $uid . '/' . $program_id . '/' . $state . '/' . $operator_type . '/' . $course_id, array('attributes' => array('class'=> 'button primary next_module')));
+  }
+  return l($text,'',array('attributes' => array('class' => 'without-link')));
+}
+
+function api_course_next_module_link($text, $uid, $program_id, $state, $operator_type, $course_id){
+  if($course_id){
+    return l($text,'courses/training/' . $uid . '/' . $program_id . '/' . $state . '/' . $operator_type . '/' . $course_id);
+  }
+  return l($text,'',array('attributes' => array('class' => 'without-link')));
+}
+
+function api_course_get_module_number($uid, $program_id, $state, $operator_type, $course_id){
+  $purchased_items = api_moodle_user_get_purchased_items($uid, $program_id, $state, $operator_type);
+
+  foreach ($purchased_items as $product_id => $item) {
+    if ($item->enrollment_info->id == $course_id){
+      $products_entity = entity_load('commerce_product', array($product_id),array('status'=>1));
+      return $products_entity[$product_id]->title;
+    }
+  }
+
+  return '';
+}
+
+function api_course_get_training_info($course_id){
+  $moodle_con = moodle_connector_connect();
+  if (!$moodle_con) {
+    return FALSE;
+  }
+
+  $query = $moodle_con->select('scorm','s');
+  $query->join('scorm_scoes', 'c', 's.launch = c.id');
+  $query->condition('s.course', $course_id, '=');
+  $query->addField('c', 'id','scoid');
+  $query->addField('c', 'scorm','a');
+  $query->addField('c', 'organization','currentorg');
+  $result = $query->execute()->fetchObject();
+
+  return $result;
+}
+
+/**
+ * Implements HOOK_theme().
+ */
+function api_course_theme($existing, $type, $theme, $path) {
+    return array(
+    	'courses_training_page' => array(
+    		'path' => $path . '/templates',
+    		'template' => 'courses--training--page',
+    		'variables' => array(
+    			'module_name' => NULL,
+          'current_module' => NULL,
+          'count_modules' => NULL,
+          'back_course_link' => NULL,
+          'course_url' => NULL,
+          'quiz_course_link' => NULL,
+          'next_module_link' => NULL
+    			),
+    		),
+    );
+}
+
+function api_course_moodle_events($user, $program_id, $state, $operator_type){
+  $operator_type = $operator_type == 'A B' ? 'A+B':$operator_type;
+
+  $response = new stdClass();
+  $response->error = FALSE;
+  $response->message = '';
+  $response->sk = FALSE;
+
+  $user_courses = api_moodle_get_courses($user);
+  $unique_id = $program_id . '__' . $operator_type . '__' . $state;
+  $course_info = $user_courses[$unique_id];
+  $state_rules = _api_program_get_rules($state, $operator_type);
+
+  if ($state_rules['type_exam'] == 'Final' && $course_info->final_exam_available && ($course_info->status == COURSE_STATUS_EXAM_PENDING || $course_info->status == COURSE_STATUS_ALL_MODULES_COMPLETED)){
+    // Check if the Final Exam was passed
+    foreach ($course_info->modules as $module) {
+      if ($module->product_type == MOODLE_COURSE_TYPE_FINAL_EXAM && $module->enrollment_info->is_completed){
+
+        if (!empty($state_rules['miscellaneous']) && !empty($state_rules['miscellaneous']['safety_keys'])) {
+
+          if ($state_rules['miscellaneous']['safety_keys'] == 2 && $operator_type == 'A+B') {
+            //Ohio for A+B generates 2 safety keys
+            $sk = api_safety_keys_generate($user->uid, $program_id, 'A', $state, TRUE);
+            $sk2 = api_safety_keys_generate($user->uid, $program_id, 'B', $state, TRUE);
+            $response->sk = $sk && $sk2 ? TRUE:FALSE;
+          }
+          else {
+            $sk = api_safety_keys_generate($user->uid, $program_id, $operator_type, $state, TRUE);
+            $response->sk = $sk ? TRUE:FALSE;
+          }
+        }
+        exit;
+      }
+    }
+  } else if (($state_rules['type_exam'] == 'Quiz' || $state_rules['type_exam'] == 'End of module') && $course_info->status == COURSE_STATUS_ALL_MODULES_COMPLETED){
+    if (!empty($state_rules['miscellaneous']) && !empty($state_rules['miscellaneous']['safety_keys'])) {
+      $sk = api_safety_keys_generate($user->uid, $program_id, $operator_type, $state, TRUE);
+      $response->sk = $sk ? TRUE:FALSE;
+    }
+  } else if ($state_rules['type_exam'] == FALSE && $course_info->status == COURSE_STATUS_ALL_MODULES_COMPLETED){
+    if (!empty($state_rules['miscellaneous']) && !empty($state_rules['miscellaneous']['safety_keys'])) {
+      $sk = api_safety_keys_generate($user->uid, $program_id, $operator_type, $state, TRUE);
+      $response->sk = $sk ? TRUE:FALSE;
+    }
+  } else {
+    $response->message = 'Event Received';
+  }
+
+  drupal_json_output($response);
+}
+
+function api_course_user_examination(){
+  global $user;
+
+  // Get uid from path.
+  $uid = arg(3);
+
+  // Is account object loaded?
+  if (!empty($uid)) {
+    $account = user_load($uid);
+  } else {
+    return '';
+  }
+
+   // Only access to customer support users.
+  if ($account && (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles) || in_array(ADMIN_ROLE, $user->roles))) {
+    $output = '';
+    $header = array(t('Course'), t('Module'), t('Status'), t('Progress'), t('Operations'));
+    $rows = array();
+
+    $attempts = api_course_user_get_quiz_attempts($account->uid,IN_PROGRESS);
+
+    foreach ($attempts as $attempt) {
+      //$program_name = api_course_get_module_name($account->uid,NULL,NULL,NULL,$attempt->course);
+      $course_params = api_course_get_course_params($attempt->course);
+      $program_name = api_moodle_get_program_name($course_params->program_id);
+      if ($course_params->state != 'NA' && $course_params->type != 'NA'){
+        $states = _api_custom_get_us_states();
+        $program_name .= ' - ' . $states[$course_params->state] . ' - ' . $course_params->type;
+      }
+      if ($course_params->course_type == MOODLE_COURSE_TYPE_FINAL_EXAM){
+        $module_name = t('Final Exam');
+      } else {
+        $program = api_moodle_get_program($course_params->program_id);
+        $modules = $program->modules[$course_params->state][$course_params->type];
+        foreach($modules as $mod_number => $module){
+          if ($module[MOODLE_COURSE_TYPE_QUIZ]->course_id == $attempt->course){
+            $module_name = $module[MOODLE_COURSE_TYPE_TRAINING]->title ? $module[MOODLE_COURSE_TYPE_TRAINING]->title:$module[MOODLE_COURSE_TYPE_QUIZ]->title;
+            $module_name = t('Module ') . $mod_number . ': ' . $module_name;
+          }
+        }
+      }
+      $progress = ($attempt->currentpage+1) . ' / ' . (int)$attempt->sumgrades;
+      $rows[] = array($program_name,$module_name,t('In Progress'),$progress,l(t('Unblock'),'courses/unblock/quiz/'.$account->uid.'/'.$attempt->id));
+    }
+
+    if (count($rows)){
+        $table_attributes = array('id' => 'examination-table', 'align' => 'center', 'width' => '100%');
+        $output .= theme_table(array('header' => $header, 'rows' => $rows, 'attributes' => $table_attributes));
+    } else {
+      $output = t('No available information.');
+    }
+    return $output;
+  } else {
+    return '';
+  }
+}
+
+function api_course_user_get_quiz_attempts($user_id,$state = FINISHED,$course_id = NULL){
+  $moodle_con = moodle_connector_connect();
+  if (!$moodle_con) {
+    return FALSE;
+  }
+
+  $query = $moodle_con->select('quiz_attempts','a');
+  $query->join('quiz', 'q', 'a.quiz = q.id');
+  $query->join('user', 'u', 'a.userid = u.id');
+  $query->condition('u.idnumber', $user_id, '=');
+  $query->condition('a.state', $state, '=');
+
+  if ($course_id){
+    $query->condition('q.course', $course_id, '=');
+  }
+
+  $query->addField('a', 'currentpage');
+  $query->addField('a', 'quiz');
+  $query->addField('a', 'id');
+  $query->addField('a', 'sumgrades', 'attempt_sumgrades');
+  $query->addField('q', 'course');
+  $query->addField('q', 'sumgrades');
+  $query->addField('u', 'idnumber');
+  $result = $query->execute()->fetchAll();
+
+  return $result;
+}
+
+function api_course_unblock_quiz_attempt($account,$quiz_attempts_id){
+  if (!is_object($account) && is_numeric($account)){
+    $account = user_load($account);
+
+    if (!$account){
+      return FALSE;
+    }
+  }
+
+  $moodle_con = moodle_connector_connect();
+  if (!$moodle_con) {
+    return FALSE;
+  }
+
+  $query = "UPDATE {quiz_attempts}"
+          . " SET {quiz_attempts}.state = :status"
+          . " FROM {quiz_attempts}"
+          . " LEFT JOIN {user} ON {quiz_attempts}.userid = {user}.id"
+          . " WHERE {quiz_attempts}.id = :attemptid AND {user}.idnumber = :idnumber";
+
+  $result = $moodle_con->query($query, array(
+    ':attemptid' => $quiz_attempts_id,
+    ':idnumber' => $account->uid,
+    ':status' => RESTORED
+  ));
+
+  if (!$result) {
+    return FALSE;
+  }
+
+  // Log activity
+  $course_id = api_course_get_info_from_quiz_attempt($quiz_attempts_id);
+  if ($course_id){
+    $course_params = api_course_get_course_params($course_id);
+    $course_params->program_name = api_moodle_get_program_name($course_params->program_id);
+    $product_info = api_moodle_get_product_info($course_params->product_id);
+    drupal_alter('course_quiz_unblocked', $account, $course_params, $product_info);
+  }
+
+  // Show message and redirect
+  drupal_set_message(t('The quiz or final exam was unblocked.'));
+  drupal_goto('admin/people/customer-support/' . $account->uid);
+}
+
+function api_course_get_info_from_quiz_attempt($quiz_attempts_id){
+  $moodle_con = moodle_connector_connect();
+  if (!$moodle_con) {
+    return FALSE;
+  }
+
+  $query = $moodle_con->select('quiz_attempts','a');
+  $query->join('quiz', 'q', 'a.quiz = q.id');
+  $query->join('course', 'c', 'q.course = c.id');
+  $query->condition('a.id', $quiz_attempts_id, '=');
+  $query->addField('c', 'id');
+  $result = $query->execute()->fetchField();
+
+  return $result;
+}
+
+/**
+ * Implements HOOK_block_info().
+ */
+function api_course_block_info() {
+  $blocks['api_course_user_examination'] = array(
+    'info' => t('Customer Support: User Blocked Examination'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+	return $blocks;
+}
+
+/**
+ * Implements HOOK_block_view().
+ */
+function api_course_block_view($delta = '') {
+
+  $block = array();
+
+  switch ($delta) {
+    case 'api_course_user_examination':
+      $block['subject'] = t('Blocked examination');
+      $block['content'] = api_course_user_examination();
+      break;
+  }
+
+  return $block;
+}
+
+/**
+ *
+ * @param type $uid
+ */
+function api_course_get_user_courses_grade($uid){
+  $user = user_load($uid);
+  $courses = api_moodle_get_courses($user);
+  $courses_grade = array();
+
+  foreach ($courses as $course) {
+    foreach ($course->modules as $module) {
+      if ($module->product_type == MOODLE_COURSE_TYPE_FINAL_EXAM){
+        $quiz_attempts = api_course_user_get_quiz_attempts($uid,FINISHED,$module->enrollment_info->id);
+        $quiz_attempt = end($quiz_attempts);
+
+        $grade = new stdClass();
+        $grade->program_id = $course->id;
+        $grade->program_name = $course->description;
+        $grade->operator_type = $course->operator_type;
+        $grade->state = $course->state;
+        $grade->state_description = $course->state_description;
+        $grade->started = $module->enrollment_info->timestart;
+
+        if ($quiz_attempt){
+          $grade->correct = (int)$quiz_attempt->attempt_sumgrades;
+          $grade->incorrect = (int)$quiz_attempt->sumgrades - (int)$quiz_attempt->attempt_sumgrades;
+        } else {
+          $grade->correct = 0;
+          $grade->incorrect = 0;
+        }
+        array_push($courses_grade,$grade);
+      }
+    }
+  }
+  return $courses_grade;
+}

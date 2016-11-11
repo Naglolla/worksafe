@@ -1,0 +1,31 @@
+<?php
+
+/**
+ * Implements HOOK_install().
+ */
+function api_tokens_install() {
+  api_tokens_update_7002();
+}
+
+/**
+ * Set default help text for tokens page.
+ */
+function api_tokens_update_7001() {
+  $default_text =
+    "Purchase a token now, and use it in all of your Courses purchases. " .
+    "If you are a Company Admin, you can  purchase a token for your employees.";
+  variable_set('api_tokens_help_text', $default_text);
+}
+
+/**
+ * Set new default help text for tokens page.
+ */
+function api_tokens_update_7002() {
+  $default_text =
+    "A token is similar to a prepaid gift card. Users may purchase a token for any amount of money by credit card or check. " .
+    "Once a token is purchased the user is given an alpha numeric code, a token ID that is tied to their company and/or facility " .
+    "and will only be accepted as payment by users registered to that company and/or facility. " .
+    "As the original purchaser of the token you will be able to see who has used your token and the balance. " . 
+    "You may add money to an existing token or create a new one at any time.";
+  variable_set('api_tokens_help_text', $default_text);
+}

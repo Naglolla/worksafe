@@ -1,0 +1,89 @@
+<?php
+
+/**
+ * Update my-account and safety key menus in api main menu and api user menu.
+ */
+function api_features_menus_update_7001() {
+  
+  $success = TRUE;
+  $message = 'my-account and safety key menus were updated correctly.';
+  
+  //delete my-account links to be re-created correctly during features revert.
+  menu_link_delete(NULL, 'my-account');
+  
+  //update Safety keys to Safety key in main menu for the same reason
+  $menu = 'menu-api-main-menu';
+  $old_link_title = 'Safety keys';
+  $new_link_title = 'Safety key';
+  $mlids = db_query("SELECT mlid FROM {menu_links} WHERE link_title = :link_title AND menu_name = :menu", array(':link_title' => $old_link_title, ':menu' => $menu))->fetchCol();
+  if ($mlids) {
+    // Loop through the matching menu items and update them.
+    foreach ($mlids as $mlid) {
+      if ($menu_link = menu_link_load($mlid)) {
+        // Set the new menu link data.
+        $menu_link['link_title'] = $new_link_title;
+        // Save the menu link.
+        if (!menu_link_save($menu_link)) {
+          // There was an error saving the link.
+          $success = FALSE;
+          $message = 'There was an error updating safety key menu.';
+        }
+        else {
+          // The link has been saved successfully.
+        }
+      }
+      else {
+        // Menu link $mlid not found.
+        $success = FALSE;
+        $message = 'There was an error updating safety key menu.';
+      }
+    }
+  }
+  else {
+    // No menu links were found for this $path.
+    $success = FALSE;
+    $message = 'There was an error updating safety key menu.';
+  }
+  
+  return array(
+    'success' => $success,
+    'query' => $message,
+  );
+  
+}
+
+/**
+ * Disable Moodle users view.
+ * Remove Safety key menu to be correctly re-created during features revert.
+ */
+function api_features_menus_update_7002() {
+  
+  //disable Moodle users view
+  $views_status = variable_get('views_defaults', array());
+  $views_status['moodle_views_moodle_users'] = TRUE;
+  variable_set('views_defaults', $views_status);
+  
+  //remove safety key/s menu to be recreated during features revert.
+  $menu = 'menu-api-main-menu';
+  $old_link_title = 'Safety keys';
+  $new_link_title = 'Safety key';
+  $mlids = db_query("SELECT mlid FROM {menu_links} WHERE (link_title = :old_link_title OR link_title = :new_link_title) AND menu_name = :menu", array(':old_link_title' => $old_link_title, ':new_link_title' => $new_link_title,':menu' => $menu))->fetchCol();
+  if ($mlids) {
+    // Loop through the matching menu items and update them.
+    foreach ($mlids as $mlid) {
+      menu_link_delete($mlid);
+    }
+    $success = TRUE;
+    $message = 'Safety key menu removed.';
+  }
+  else {
+    // No menu links were found for this $path.
+    $success = FALSE;
+    $message = 'There was an error updating safety key menu.';
+  }
+  
+  return array(
+      'success' => $success,
+      'query' => $message,
+  );
+}

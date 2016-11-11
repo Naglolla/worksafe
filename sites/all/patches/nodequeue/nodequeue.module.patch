@@ -1,0 +1,15 @@
+diff --git a/nodequeue.module b/nodequeue.module
+index 312e02d..bccffde 100644
+--- a/nodequeue.module
++++ b/nodequeue.module
+@@ -782,7 +782,9 @@ function nodequeue_load_subqueues_by_reference($references, $bypass_cache = FALS
+   if (!empty($references)) {
+     $query = db_select('nodequeue_subqueue', 's')
+       ->groupBy('s.sqid')
+-      ->fields('s');
++      ->groupBy('s.qid')
++      ->groupBy('s.reference')
++      ->fields('s', array('sqid', 'qid', 'reference' ));
+     $query->leftJoin('nodequeue_nodes', 'n', 'n.sqid = s.sqid');
+     $query->addExpression('COUNT(n.position)', 'count');
+ 

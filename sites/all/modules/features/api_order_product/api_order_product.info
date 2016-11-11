@@ -1,0 +1,15 @@
+name = API Order Product
+description = API Order Product feature
+core = 7.x
+package = API Features
+php = 5.2.4
+dependencies[] = commerce_line_item
+dependencies[] = ctools
+dependencies[] = features
+dependencies[] = list
+dependencies[] = views
+features[ctools][] = views:views_default:3.0
+features[features_api][] = api:1
+features[field][] = commerce_line_item-product-field_order_product_state
+features[field][] = commerce_line_item-product-field_order_product_type
+mtime = 1427400763

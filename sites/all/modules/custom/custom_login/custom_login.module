@@ -1,0 +1,85 @@
+<?php
+
+/**
+ * Implements hook_form_alter().
+ */
+function custom_login_form_alter(&$form, $form_state, $form_id) {
+  // Only make changes to these forms.
+  if (in_array($form_id, array('user_login', 'user_login_block'))) {
+
+    $form['#validate'][] = 'custom_login_user_login_name_validate';
+  }
+}
+/**
+ * custom_login_user_login_name_validate() callback helper function.
+ */
+function custom_login_user_login_name_validate(&$form, $form_state) {
+
+    global $base_url;
+
+	$errors = form_get_errors();
+
+    if (!is_null($errors)) {
+  	    if (@$_SESSION['login_attempts']==5) {
+  	        drupal_get_messages($type = NULL, $clear_queue = TRUE);
+
+  	        drupal_set_message(
+              t('We have noticed that you could not sign in. If you forgot your credentials, follow the link: <a href="@password">Forgot your username or password</a>. If you need further assistance, <a href="@contact">Contact Us.</a>',
+                array(
+                  '@password' => url('user/password', array('query' => array('name' => $form_state['values']['name'])) ),
+                  '@contact' => url('help-and-faq')
+                )
+              ),
+              'error'
+            );
+
+            $_SESSION['login_attempts'] = null;
+  	        return;
+    }
+        $_SESSION['login_attempts'] = @$_SESSION['login_attempts'] +1;
+    }
+}
+
+function custom_login_form_user_login_alter(&$form, &$form_state) {
+  $form['name']['#prefix'] = '<h1>' . t('Login') . '</h1>';
+  $form['name']['#prefix'] .= '<div class="information">';
+  $form['name']['#prefix'] .= t('Please login into API WorkSafe. This will enable you to take courses and examinations for your state, administer your profile and get a Safety Key.');
+  $form['name']['#prefix'] .= '</div>';
+  $form['name']['#prefix'] .= '<div class="grid-12">';
+  $form['name']['#prefix'] .= '<div id="user_login_form">';
+  $form['name']['#prefix'] .= '<h3 class="center">'.t('Existing User').'</h3>';
+  $form['name']['#description'] = '';
+  $form['name']['#attributes'] = array('placeholder' => t('Username'));
+  $form['pass']['#description'] = '';
+  $form['pass']['#attributes'] = array('placeholder' => t('Password'));
+  $form['actions']['#suffix'] = l(t('Forgot Your Username or Password?'), 'user/password', array('attributes' => array('class' => array('login-password'), 'title' => t('Get a new password'))));
+  $form['actions']['#suffix']  .= '</div></div>';
+
+  if (variable_get('user_register', USER_REGISTER_VISITORS_ADMINISTRATIVE_APPROVAL) != USER_REGISTER_ADMINISTRATORS_ONLY) {
+    $form['actions']['#suffix'] .= '<div class="grid-12 create-account clearfix">';
+    $form['actions']['#suffix'] .= '<div>';
+    $form['actions']['#suffix'] .= '<h3 class="center">' . t('New User?') . '</h3>';
+    $form['actions']['#suffix'] .= '<div class="information">';
+    $form['actions']['#suffix'] .= t('Create a new user to make full use of API WorkSafe.');
+    $form['actions']['#suffix'] .= '</div>';
+    $form['actions']['#suffix'] .= l(t('Register'), 'user/register', array('attributes' => array('class' => array('login-register'), 'title' => t('Register'))));
+    $form['actions']['#suffix'] .= '</div></div>';
+  }
+}
+
+function custom_login_user_login(&$edit, $account) {
+  $parameters = drupal_get_query_parameters();
+
+  if ($parameters['current'] && $parameters['current'] == 'user/password'){
+    $_GET['current'] = 'my-account';
+  }
+}
+
+function custom_login_url_inbound_alter(&$path, $original_path, $path_language) {
+  if (drupal_match_path($original_path, 'users/*')) {
+    $source = drupal_lookup_path('source', $original_path);
+    if (!empty($source)) {
+      drupal_goto($source . '/edit');
+    }
+  }
+}

@@ -1,0 +1,78 @@
+body.context-company {
+  
+  #block-system-main {
+    width: 90%;
+    margin: auto;
+    
+    .content {
+      .company-details {
+        background: @main-color-light;
+        padding: 50px 60px 40px 60px;
+        .field {
+          margin-bottom: 10px; 
+          div {
+            color: @main-color-dark;
+            display: inline-block;
+            @media @small-size {
+              display: block;
+            }
+          }
+          div.field-label {
+            padding-right: 10px;
+            font: @font-body-button;
+            font-weight: 500;
+            @media @small-size {
+              padding-right: 0;
+            }
+          }
+          div.fiels-items {
+            font-weight: 300;
+            min-height: 24px;
+          }
+          @media @small-size {
+            margin-bottom: 20px; 
+            text-align: center;
+          }
+        }
+        //specific items
+        .field-type-country, .field-type-list-text {
+          .field-label {
+            display: block;
+          }
+          .field-items {
+            display: block;
+            margin-left: 40px;
+            .field-item {
+              display: block;
+            }
+            @media @small-size {
+              margin-left: 0;
+            }
+          }
+        }
+        @media @small-size {
+          padding: 30px; 
+        }
+      }
+    }
+    
+    h2 {
+      font: @font-body-title;
+      color: @main-color-dark;
+      text-transform: uppercase;
+      margin: 50px 0 25px 0;
+      @media @small-size {
+        font: @font-body-sub-title;
+      }
+    }
+    
+    a:last-child {
+      .button;
+      .button.primary;
+    }
+    
+    @media @small-size {
+      width: 100%;
+    }
+  }
+}

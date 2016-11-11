@@ -1,0 +1,73 @@
+table {
+  border: 2px solid @main-color-dark;
+  width: 90%;
+  margin: 0 auto 45px auto;
+  thead {
+    th {
+      background: @main-color-light;
+      border: 0;
+      font: @font-body-table;
+      font-weight: 700;
+      color: @main-color-dark;
+      padding: 25px 5px;
+      &:first-child {
+        padding-left: 25px;
+        @media @small-size {
+          padding-left: 15px;
+        }
+      }
+      &:last-child {
+        padding-right: 25px;
+        @media @small-size {
+          padding-right: 15px;
+        }
+      }
+    }
+  }
+  tbody {
+    tr {
+      color: @main-color-dark;
+      font: @font-body-table;
+      background-color: #fff;
+      background: none;
+      border: 0;
+      border-bottom: 0;
+      padding: 30px 5px;
+      td {
+        padding: 30px 5px;
+        border: 0;
+      }
+      td:first-child {
+        padding-left: 25px;
+        @media @small-size {
+          padding-left: 15px;
+        }
+      }
+      td:last-child {
+        padding-right: 25px;
+        @media @small-size {
+          padding-right: 15px;
+        }
+      }
+    }
+  }
+}
+
+table.quizreviewsummary {
+  tbody {
+    tr {
+      th, td {
+        background: none;
+        padding: 20px 8px;
+        border-top: 0;
+      }
+    }
+  }
+  .passed {
+    font-weight: 700;
+  }
+  .failed {
+    color: @main-color-orange;
+    font-weight: 700;
+  }
+}

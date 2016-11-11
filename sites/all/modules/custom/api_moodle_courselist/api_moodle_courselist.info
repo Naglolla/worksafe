@@ -1,0 +1,10 @@
+name = API Moodle Course List
+description = Get Moodle course list and replace SKU producto from this list.
+dependencies[] = moodle_connector
+dependencies[] = api_custom
+package = API Custom
+core = "7.x"
+version = "7.x-0.1"
+project = "api_moodle_courselist"
+
+

@@ -1,0 +1,13 @@
+& (amp) double encoded in select widgets
+
+
+Issue:
+Select widget (from the options module) prone to double encoding
+Ampersands and other characters are not displayed correctly in <select> widgets
+
+Patch:
+https://www.drupal.org/files/entityreference-decode_option_labels-1665818-32_0.patch
+
+Drupal Bug:
+https://www.drupal.org/node/1665818#comment-7069158
+https://www.drupal.org/node/1919338

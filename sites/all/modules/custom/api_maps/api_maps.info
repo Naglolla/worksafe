@@ -1,0 +1,9 @@
+name = API Maps
+description = JQuery Maps for API
+package = API Custom
+version = VERSION
+core = 7.x
+
+dependencies[] = api_maps_entities
+dependencies[] = jvectormap
+dependencies[] = pathauto_entity

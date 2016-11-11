@@ -1,0 +1,18 @@
+<?php
+/**
+ * Implements HOOK_install().
+ */
+function api_ferature_dependencies_install() {
+  api_ferature_dependencies_update_7001();
+}
+/**
+ * Configure language settings.
+ */
+function api_ferature_dependencies_update_7001() {
+  require_once DRUPAL_ROOT . '/modules/locale/locale.admin.inc';
+  $vars = array('values' => array());
+  $vars['values']['site_default'] = "en";
+  $vars['values']['enabled'] = array('es' => 'es', 'en' => 0);
+  $vars['values']['weight'] = array('es' => 0, 'en' => 0);
+  locale_languages_overview_form_submit(array(), $vars);
+}

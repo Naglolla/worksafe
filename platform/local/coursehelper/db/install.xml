@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/coursehelper/db" VERSION="20150413" COMMENT="XMLDB file for Moodle local/coursehelper"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+    <TABLE NAME="local_coursehelper" COMMENT="Course helper local plugin">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Course id"/>
+        <FIELD NAME="cmid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Course module id"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="User performing the action"/>
+        <FIELD NAME="modname" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false" COMMENT="module type name"/>
+        <FIELD NAME="component" TYPE="char" LENGTH="50" NOTNULL="false" SEQUENCE="false" COMMENT="component name"/>
+        <FIELD NAME="action" TYPE="char" LENGTH="50" NOTNULL="false" SEQUENCE="false" COMMENT="action name"/>
+        <FIELD NAME="target" TYPE="char" LENGTH="50" NOTNULL="false" SEQUENCE="false" COMMENT="target name"/>
+        <FIELD NAME="objecttable" TYPE="char" LENGTH="50" NOTNULL="false" SEQUENCE="false" COMMENT="object table name"/>
+        <FIELD NAME="completionstate" TYPE="int" LENGTH="1" NOTNULL="true" SEQUENCE="false" COMMENT="0 Incomplete, 1 Complete"/>
+        <FIELD NAME="grade" TYPE="int" LENGTH="3" NOTNULL="true" SEQUENCE="false" COMMENT="Course module grade"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="coursetime" UNIQUE="false" FIELDS="courseid, timecreated"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

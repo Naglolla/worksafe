@@ -1,0 +1,2507 @@
+<?php
+
+/**
+ * @file
+ * Defines program rules.
+ */
+
+/**
+ * Implements HOOK_menu().
+ */
+function api_program_rules_menu() {
+  $items['admin/config/program/rules'] = array(
+    'title'            => 'API Program Rules',
+    'page callback'    => 'drupal_get_form',
+    'page arguments'   => array('api_program_rules_page'),
+	'access arguments' => array('admin safety keys'),
+	'type' => MENU_NORMAL_ITEM,
+  );
+  $items['program/rules/state/%'] = array(
+    'title'            => 'Program Rules',
+    'page callback'    => 'api_program_rules_get_operators',
+    'page arguments'   => array(3),
+	'access arguments' => array('admin safety keys'),
+  );
+  $items['program/rules/state/%/type/%'] = array(
+    'title'            => 'Program Rules',
+    'page callback'    => 'api_program_rules_get_rules',
+    'page arguments'   => array(3, 5),
+	'access callback' => TRUE,
+  );
+  $items['program/rules/product-types/%/%'] = array(
+    'title' => 'Valid product types',
+    'page callback' => 'api_program_rules_get_valid_product_types_callback',
+    'page arguments' => array(3, 4),
+    'access callback' => TRUE,
+  );
+  return $items;
+}
+
+function api_program_rules_get_valid_product_types_callback($state = NULL, $operator_type = NULL) {
+  $result = array();
+  if (empty($state) || empty($operator_type)) {
+    return drupal_json_output($result);
+  }
+
+  $result = api_program_rules_get_valid_product_types($state, $operator_type);
+
+  return drupal_json_output($result);
+}
+
+function api_program_rules_get_valid_product_types($state = NULL, $operator_type = NULL) {
+  if ($operator_type == 'A B' || $operator_type == 'AB') {
+		$operator_type = 'A+B';
+	}
+  $state_rules = _api_program_get_rules($state, $operator_type);
+  $response = array();
+  if (!empty($state_rules)) {
+    //calculate the response based on training_exam, training_only, exam_only
+    //for product creation, the returned types are the allowed ones
+    //for the cart, the returned types are the NOT allowed ones.
+    //Recommended Practice is always allowed for creation
+    //Quiz is never allowed to be sold separately
+    $creation_options = array(MOODLE_COURSE_TYPE_RECOMMENDED => t('Recommended Practice'));
+    $cart_options = array(MOODLE_COURSE_TYPE_QUIZ => t('Quiz'));
+
+    if ($state_rules['exam_only']) {
+      $creation_options[MOODLE_COURSE_TYPE_FINAL_EXAM] = t('Final Exam');
+    }
+    else {
+      $cart_options[MOODLE_COURSE_TYPE_FINAL_EXAM] = t('Final Exam');
+    }
+
+    if ($state_rules['training_only']) {
+      $creation_options[MOODLE_COURSE_TYPE_TRAINING] = t('Training');
+      $creation_options[MOODLE_COURSE_TYPE_QUIZ] = t('Quiz');
+      $creation_options[MOODLE_COURSE_TYPE_ALL_MODULES] = t('All Modules');
+    }
+    else {
+      $cart_options[MOODLE_COURSE_TYPE_TRAINING] = t('Training');
+      $cart_options[MOODLE_COURSE_TYPE_ALL_MODULES] = t('All Modules');
+    }
+
+    if ($state_rules['training_exam']) {
+      $creation_options[MOODLE_COURSE_TYPE_TRAINING] = t('Training');
+      $creation_options[MOODLE_COURSE_TYPE_QUIZ] = t('Quiz');
+      $creation_options[MOODLE_COURSE_TYPE_FINAL_EXAM] = t('Final Exam');
+      $creation_options[MOODLE_COURSE_TYPE_FULL_COURSE] = t('Full Course + Exam');
+    }
+
+    if (!$state_rules['exam_only'] && !$state_rules['training_only'] && !$state_rules['training_exam']) {
+    	$creation_options[MOODLE_COURSE_TYPE_TRAINING] = t('Training');
+      $creation_options[MOODLE_COURSE_TYPE_QUIZ] = t('Quiz');
+      $creation_options[MOODLE_COURSE_TYPE_ALL_MODULES] = t('All Modules');
+      $cart_options = array(
+      	MOODLE_COURSE_TYPE_QUIZ => t('Quiz'),
+      	MOODLE_COURSE_TYPE_FINAL_EXAM => t('Final Exam'),
+      	MOODLE_COURSE_TYPE_FULL_COURSE => t('Full Course + Exam')
+      );
+    }
+
+    $response['creation']['types'] = $creation_options;
+    $response['cart']['types'] = $cart_options;
+  }
+  else {
+    //if we don't have rules for the state + operator type combination, return all
+    $creation_options[MOODLE_COURSE_TYPE_TRAINING] = t('Training');
+    $creation_options[MOODLE_COURSE_TYPE_QUIZ] = t('Quiz');
+    $creation_options[MOODLE_COURSE_TYPE_FINAL_EXAM] = t('Final Exam');
+    $creation_options[MOODLE_COURSE_TYPE_ALL_MODULES] = t('All Modules');
+    $creation_options[MOODLE_COURSE_TYPE_FULL_COURSE] = t('Full Course + Exam');
+    $creation_options[MOODLE_COURSE_TYPE_RECOMMENDED] = t('Recommended Practice');
+    $cart_options[MOODLE_COURSE_TYPE_QUIZ] = t('Quiz');
+    $response['creation']['types'] = $creation_options;
+    $response['cart']['types'] = $cart_options;
+  }
+
+  return $response;
+}
+
+function _api_program_get_rules($state, $operator) {
+	$rules = api_program_rules_definition();
+	$state_rules = array();
+	if (!empty($rules[$state]['types'][$operator])) {
+		$state_rules = $rules[$state]['types'][$operator];
+	}
+  return $state_rules;
+}
+/**
+ * Callback for api_program_rules_page().
+ */
+function api_program_rules_page() {
+
+	$form['#attached']['js'] = array(
+	  drupal_get_path('module', 'api_program_rules') . '/js/prettyprint.js' => array(
+	  'type' => 'file',
+	  ),
+	  drupal_get_path('module', 'api_program_rules') . '/js/api_program_rules.js' => array(
+	  'type' => 'file',
+	  ),
+	);
+
+	$rules = api_program_rules_definition();
+	$states = _api_custom_get_us_states();
+	$states = array_intersect_key($states, $rules);
+	$state_options = array('' => '-Select-');
+	$state_options = array_merge($state_options, $states);
+
+	$form['state'] = array(
+		'#type' => 'select',
+		'#options' => $state_options,
+	);
+
+	$form['operator_type'] = array(
+		'#type' => 'select',
+		'#options' => array('' => '-Select-'),
+	    '#states' => array(
+	      'invisible' => array(
+	        '#edit-state' => array('value' => '')
+	      )
+	    )
+	);
+
+	$form['rules_markup'] = array(
+		'#type' => 'markup',
+		'#markup' => '<div class="state-rules"></div>'
+	);
+
+	$description_items = array(
+		'training_exam' => 'Training & Exam Offered?',
+		'training_only' => 'Training Only Offered?',
+		'exam_only' => 'Exam Only Offered?',
+		'type_exam' => 'Type of Exam',
+		'complete_quizzes' => 'Complete Quizzes to Unlock Final Exam?',
+		'exam_questions' => 'Exam Question Count',
+		'exam_time_limit' => 'Exam Time Limit(Hours)',
+		'passing_threshold' => 'Passing Threshold',
+		'final_exam' => 'Final exam %',
+		'overall' => 'Overall %',
+		'each_module_quiz' => 'Each module quiz %',
+		'exam_attempts' => 'Final Exam Attempts per Purchase',
+		'custom_certificate' => 'Custom Certificate?',
+		'certificate_expiration' => 'Certificate Expiration(Years)',
+		'regulatory_questions' => 'Show regulatory questions in purchase page.',
+	);
+	$description = '';
+	foreach ($description_items as $key => $value) {
+		$description .= t('<b>@key</b>: @value', array('@key' => $key, '@value' => $value)) . '<br/>';
+	}
+	$form['description'] = array(
+		'#type' => 'markup',
+		'#markup' => '<div class="description">' . $description . '</div>',
+	);
+	return $form;
+}
+
+/**
+ * Return state's operators.
+ */
+function api_program_rules_get_operators($state) {
+	$rules = api_program_rules_definition();
+	$types = array();
+	if (!empty($rules[$state]['types'])) {
+		$types = array_keys($rules[$state]['types']);
+		$types = array_combine($types, $types);
+
+	}
+	drupal_json_output($types);
+}
+
+/**
+ * Return state's operators.
+ */
+function api_program_rules_get_rules($state, $operator) {
+	if ($operator == 'A B' || $operator == 'AB') {
+		$operator = 'A+B';
+	}
+	$state_rules = _api_program_get_rules($state, $operator);
+	drupal_json_output($state_rules);
+}
+
+/**
+ * Defines api program rules
+ */
+function api_program_rules_definition() {
+	$rules = array(
+		'AK' => array(
+			'name' => t('Alaska'),
+			'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				),
+			),
+        'AL' => array(
+        	'name' => t('Alabama'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'AR' => array(
+        	'name' => t('Arkansas'),
+        	'types' => array(
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'CO' => array(
+        	'name' => t('Colorado'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'CT' => array(
+        	'name' => t('Connecticut'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => 2,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => 2,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => 2,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => 2,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'DC' => array(
+        	'name' => t('District Of Columbia'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 1,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+		'FL' => array(
+        	'name' => t('Florida'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 80,
+          ),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 80,
+          ),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 80,
+          ),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 80,
+          ),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				),
+        	),
+        'GA' => array(
+        	'name' => t('Georgia'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'HI' => array(
+        	'name' => t('Hawaii'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'IA' => array(
+        	'name' => t('Iowa'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+		'IN' => array(
+        	'name' => t('Indiana'),
+        	'types' => array(
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'IL' => array(
+        	'name' => t('Illinois'),
+        	'types' => array(
+        		'A+B+C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => 2,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B+C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => 2,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => 2,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'MA' => array(
+        	'name' => t('Massachusetts'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => FALSE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 75,
+					'exam_time_limit' => 4,
+					'passing_threshold' => array(
+							'overall' => 60,
+						),
+					'exam_attempts' => 100,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'A' => array(
+					'training_exam' => FALSE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 60,
+					'exam_time_limit' => 3,
+					'passing_threshold' => array(
+							'overall' => 60,
+						),
+					'exam_attempts' => 100,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'B' => array(
+					'training_exam' => FALSE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 60,
+					'exam_time_limit' => 3,
+					'passing_threshold' => array(
+							'overall' => 60,
+						),
+					'exam_attempts' => 12,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'Reciprocity' => array(
+					'training_exam' => FALSE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 30,
+					'exam_time_limit' => 2,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 1,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'Third Party' => array(
+					'training_exam' => FALSE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 30,
+					'exam_time_limit' => 2,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 1,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+        		),
+        	),
+        'MD' => array(
+        	'name' => t('Maryland'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => 1,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'MI' => array(
+        	'name' => t('Michigan'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => FALSE,
+					'complete_quizzes' => FALSE,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+        		),
+        	),
+        'MN' => array(
+        	'name' => t('Minnesota'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => FALSE,
+					'complete_quizzes' => FALSE,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'A' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => FALSE,
+					'complete_quizzes' => FALSE,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'B' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => FALSE,
+					'complete_quizzes' => FALSE,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'C' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => 5,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'MS' => array(
+        	'name' => t('Mississippi'),
+        	'types' => array(
+				'Reciprocity' => array(
+					'training_exam' => FALSE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => FALSE,
+					'complete_quizzes' => FALSE,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'notify_state' => TRUE,
+              'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'NC' => array(
+        	'name' => t('North Carolina'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+		'NE' => array(
+        	'name' => t('Nebraska'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 80,
+          ),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 10,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 80,
+          ),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 10,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 80,
+          ),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 80,
+          ),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				),
+        	),
+		'NH' => array(
+        	'name' => t('New Hampshire'),
+        	'types' => array(
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'NM' => array(
+        	'name' => t('New Mexico'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 5,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 5,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'NV' => array(
+        	'name' => t('Nevada'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'OH' => array(
+        	'name' => t('Ohio'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 20,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 0,
+          ),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 2,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 10,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 0,
+          ),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 10,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 0,
+          ),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+              'overall' => 0,
+          ),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				),
+        	),
+        'OK' => array(
+        	'name' => t('Oklahoma'),
+        	'types' => array(
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 1,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'OR' => array(
+        	'name' => t('Oregon'),
+        	'types' => array(
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Quiz',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 1,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'PA' => array(
+        	'name' => t('Pennsylvania'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 1,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'SC' => array(
+        	'name' => t('South Carolina'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'SD' => array(
+        	'name' => t('South Dakota'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'TX' => array(
+        	'name' => t('Texas'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'UT' => array(
+        	'name' => t('Utah'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'A' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'B' => array(
+					'training_exam' => FALSE,
+					'training_only' => TRUE,
+					'exam_only' => FALSE,
+					'type_exam' => 'End of module',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => FALSE,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(),
+					'exam_attempts' => FALSE,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => 3,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 0,
+						),
+					),
+        		),
+        	),
+        'VA' => array(
+        	'name' => t('Virginia'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+		'VT' => array(
+        	'name' => t('Vermont'),
+        	'types' => array(
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'WA' => array(
+        	'name' => t('Washington'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'regulatory_questions' => TRUE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => TRUE,
+					'exam_only' => TRUE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'final_exam' => 80,
+							'each_module_quiz' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'WI' => array(
+        	'name' => t('Wisconsin'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+        'WV' => array(
+        	'name' => t('West Virginia'),
+        	'types' => array(
+				'A+B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'A' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'B' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => TRUE,
+					'exam_questions' => 75,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => FALSE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+		'WY' => array(
+        	'name' => t('Wyoming'),
+        	'types' => array(
+				'C' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+		'Crude Oil by Rail' => array(
+        	'name' => t('Crude Oil by Rail'),
+        	'types' => array(
+				'Introduction' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'Introduction + Sampling/Packing' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'Introduction + LTQ' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'Introduction + Loading/Unloading' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'Introduction + Sampling/Packing + LTQ' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'Introduction + Sampling/Packing + Loading/Unloading' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'Introduction + LTQ + Loading/Unloading' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+				'Introduction + Sampling/Packing + LTQ + Loading/Unloading' => array(
+					'training_exam' => TRUE,
+					'training_only' => FALSE,
+					'exam_only' => FALSE,
+					'type_exam' => 'Final',
+					'complete_quizzes' => FALSE,
+					'exam_questions' => 5,
+					'exam_time_limit' => FALSE,
+					'passing_threshold' => array(
+							'overall' => 80,
+						),
+					'exam_attempts' => 2,
+					'custom_certificate' => TRUE,
+					'certificate_expiration' => FALSE,
+					'miscellaneous' => array(
+							'safety_keys' => 1,
+						),
+					),
+        		),
+        	),
+         'NA' => array(
+            'name' => t('Non-UST'),
+            'types' => array(
+              'NA' => array(
+                'training_exam' => TRUE,
+                'training_only' => TRUE,
+                'exam_only' => TRUE,
+                'type_exam' => 'End of module',
+                'complete_quizzes' => TRUE,
+                'exam_questions' => 75,
+                'exam_time_limit' => FALSE,
+                'passing_threshold' => array(
+                    'overall' => 80,
+                  ),
+                'exam_attempts' => 2,
+                'custom_certificate' => TRUE,
+                'certificate_expiration' => FALSE,
+                'miscellaneous' => array(
+                    'safety_keys' => 1,
+                  ),
+                ),
+            ),
+          ),
+    );
+	return $rules;
+}

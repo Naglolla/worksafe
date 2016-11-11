@@ -1,0 +1,7 @@
+name = API Sales Report
+description = API Sales Report
+package = API Custom
+version = VERSION
+core = 7.x
+
+files[] = api_sales_report.pages.inc

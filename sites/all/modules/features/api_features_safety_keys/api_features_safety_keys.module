@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Features Safety Keys feature.
+ */
+
+include_once 'api_features_safety_keys.features.inc';

@@ -1,0 +1,1842 @@
+<?php
+
+/**
+ * @file Implements features regarding payment with tokens.
+ *
+ */
+define('TOKEN_VISIBILITY_PRIVATE', 1);
+define('TOKEN_VISIBILITY_PUBLIC', 2);
+define('TOKEN_ENTITY', 'token_entity');
+define('TOKEN_ENTITY_BUNDLE', 'token_entity_bundle');
+define('TOKEN_PRODUCT_TYPE', 'token');
+define('TOKEN_LINE_ITEM_TYPE', 'token_line_item');
+define('TOKEN_USE_LINE_ITEM_TYPE', 'token_use_line_item');
+define('TOKEN_FIXED_DISCOUNT', 1);
+define('TOKEN_PERCENT_DISCOUNT', 2);
+
+/**
+ * Implements hook_menu().
+ */
+function api_tokens_menu() {
+  $items['user/%user/tokens'] = array(
+    'title' => 'My Tokens',
+    'access callback' => 'api_tokens_render_user_tokens_access',
+    'access arguments' => array(2),
+    'page callback' => 'api_tokens_render_user_tokens',
+    'page arguments' => array('2'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1,
+  );
+  $items['admin/company/tokens'] = array(
+    'title' => 'Tokens',
+    'access callback' => 'api_tokens_company_admin_token_list_access',
+    'page callback' => 'api_tokens_company_admin_token_list_page',
+    'file' => 'api_tokens.pages.inc',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );
+  $items['admin/config/api'] = array(
+    'title' => 'API',
+    'description' => 'API Configuration.',
+    'page callback' => 'system_admin_menu_block_page',
+    'position' => 'right',
+    'access arguments' => array('access administration pages'),
+    'file path' => drupal_get_path('module', 'system'),
+    'file' => 'system.admin.inc',
+  );
+  $items['admin/config/api/tokens-page'] = array(
+    'title' => 'Tokens Page',
+    'description' => 'Administer and Configure Tokens page.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_tokens_configuration_form'),
+    'file' => 'api_tokens.admin.inc',
+    'access arguments' => array('access administration pages'),
+    'weight' => 0,
+  );
+  /*$items['token/%/history'] = array(
+    'title' => 'Purchase History',
+    'access callback' => 'api_tokens_purchase_history_access',
+    'page callback' => 'api_tokens_purchase_history_page',
+    'page arguments' => array(1),
+    'file' => 'api_tokens.pages.inc',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );*/
+  $items['token/%/history/export'] = array(
+    'title' => 'Purchase History Export',
+    'access callback' => 'api_tokens_purchase_history_access',
+    'page callback' => 'api_tokens_purchase_history_export',
+    'page arguments' => array(1),
+    'file' => 'api_tokens.pages.inc',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );
+  $items['token/%/remove'] = array(
+    'title' => 'Remove Token',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_tokens_delete_confirm', 1),
+    'access callback' => 'api_tokens_management_token_access',
+    'file' => 'api_tokens.pages.inc',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );
+  $items['token/%/view'] = array(
+    'title' => 'View Token',
+    'page callback' => 'api_tokens_view_token_page',
+    'page arguments' => array(1),
+    'access callback' => 'api_tokens_management_token_access',
+    'file' => 'api_tokens.pages.inc',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );
+  return $items;
+}
+
+/**
+ * Access Callback for token/modify menu.
+ */
+function api_tokens_management_token_access(){
+  global $user;
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles) || in_array(ADMIN_ROLE, $user->roles)) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Access Callback for token/%/history menu.
+ */
+function api_tokens_purchase_history_access() {
+  global $user;
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles) || in_array(ADMIN_ROLE, $user->roles)) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Access Callback for admin/company/tokens menu.
+ */
+function api_tokens_company_admin_token_list_access(){
+  global $user;
+  if (in_array(COMPANY_ADMIN_ROLE, $user->roles)) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/*
+ * Implementes hook_node_view.
+ */
+function api_tokens_node_view($node, $view_mode, $langcode) {
+  // Add additional info for tokens page.
+  if ($node->type == "token") {
+    $token_nid = variable_get('token_node_nid', '');
+    if ($token_nid == $node->nid && $view_mode == 'full') {
+      $node->content['token_page_title'] = array(
+        "#markup"=> '<h1 class="tokens-title">' . t('Token') . '</h1>',
+        "#weight"=> -1
+      );
+      $help_text = variable_get('api_tokens_help_text', '');
+      if ($help_text) {
+        $node->content['token_page_help_text'] = array(
+          "#markup"=> '<div class="tokens-help-text">' . t($help_text) . '</div>',
+          "#weight"=> 0
+        );
+      }
+    }
+    return $node;
+  }
+}
+
+/**
+ * Generates a new unique token code.
+ *
+ * @param $length
+ *   Optional The length of the new code.
+ * @return String
+ *   The new token code.
+ */
+function api_tokens_generate_token_code($length = 8) {
+  // We define the possible characters. No 'l','1', 'i', 'I', 'O', '0', 'o' to prevent
+  // reconisation problems.
+  $characters = array(
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M',
+    'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'm', 'n',
+    'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+    '2', '3', '4', '5', '6', '7', '8', '9',
+  );
+
+  $numberOfCharacters = count($characters);
+  $codeFound = FALSE;
+
+  // We need to check if the produced token code is already in the
+  // database. We try this for 1000 iteration. If we then not found a
+  // a code, we stop. There must be an error in this case.
+  for ($i = 0; $i < 1000 && $codeFound == FALSE; $i++) {
+    $code = '';
+
+    // Create the code per character
+    for ($c = 0; $c < $length; $c++) {
+      $randIndex = mt_rand(0, $numberOfCharacters - 1);
+      $code .= $characters[$randIndex];
+    }
+
+    // Check in the database if the generated code is already defined.
+    if (api_tokens_code_exists($code) == FALSE) {
+      $codeFound = TRUE;
+    }
+  }
+
+  return $code;
+}
+
+/**
+ * Checks if a token code is valid (doesn't exist and is 8 alphanumeric characters long).
+ */
+function api_tokens_code_is_valid($code) {
+  if (preg_match('/^[A-Za-z0-9]{8}$/', $code) && !api_tokens_code_exists($code)) {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+/**
+ * Checks if a given token code exists.
+ *
+ * @param $code
+ *   Token code to check.
+ *
+ * @return boolean
+ *   Returns TRUE if the coupon exists, otherwise return FALSE.
+ */
+function api_tokens_code_exists($code) {
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', TOKEN_ENTITY)
+      ->fieldCondition('field_token_entity_id', 'value', $code, '=');
+
+  $result = $query->execute();
+
+  if (empty($result)) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Service callback.
+ */
+function api_tokens_service_generate_token_code() {
+  return array('result' => api_tokens_generate_token_code());
+}
+
+/**
+ * Implements of hook_services_resources().
+ */
+function api_tokens_services_resources() {
+  return array(
+    'api' => array(
+      'actions' => array(
+        'generateTokenCode' => array(
+          'access callback' => 'api_tokens_resource_retrieve_access',
+          'help' => 'Generates Token ID.',
+          'callback' => 'api_tokens_service_generate_token_code',
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * Services access callback.
+ */
+function api_tokens_resource_retrieve_access() {
+  return user_access('access content');
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function api_tokens_form_eck__entity__form_add_token_entity_token_entity_bundle_alter(&$form, &$form_state, $form_id) {
+  global $user;
+
+  //change some labels
+  //$form['field_token_entity_id'][LANGUAGE_NONE][0]['value']['#title'] = t('Token ID');
+  //$form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value']['#title'] = t('Purchase Token');
+
+  //remove none option in fields with Chosen enabled to avoid the user to select None + other options
+  unset($form['field_token_entity_states'][LANGUAGE_NONE]['#options']['_none']);
+  unset($form['field_token_entity_programs'][LANGUAGE_NONE]['#options']['_none']);
+  unset($form['field_token_entity_companies'][LANGUAGE_NONE]['#options']['_none']);
+
+  // Validate charged amount.
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value']['#element_validate'][] = 'api_element_validate_positive';
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value']['#maxlength'] = 7;
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value']['#maxlength'] = 7;
+
+  $form['#validate'][] = 'api_tokens_custom_validate';
+  //to remove N/A option
+  $form['field_entity_token_fixed_percent'][LANGUAGE_NONE]['#options'] = array(1 => 'Fixed', 2 => 'Percentage');
+
+  if (!in_array(ADMIN_ROLE, $user->roles)) {
+    $form['field_token_entity_visibility']['#access'] = FALSE;
+    $form['field_token_total_value']['#access'] = FALSE;
+  }
+
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles) || in_array(ADMIN_ROLE, $user->roles)) {
+    $form['#attached']['js'] = array(
+            drupal_get_path('module', 'api_tokens') . '/js/api_tokens.js' => array(
+            'type' => 'file',
+            ),
+    );
+    $form['field_token_entity_id'][LANGUAGE_NONE]['#suffix'] = '<a id="token-get-random-code" class="get-random-code" rel="field_token_entity_id[und][0][value]" href="#">' . t('Get random code') . '</a></div>';
+  }
+
+  $form['#submit'][] = 'api_tokens_form_add_token_entity_submit';
+}
+
+/**
+ * Submit callback.
+ */
+function api_tokens_form_add_token_entity_submit(&$form, &$form_state) {
+  global $user;
+
+  $messages = drupal_get_messages('status');
+  if (!empty($messages)) {
+    drupal_set_message(t("Token @token_code has been saved",
+      array(
+        "@token_code" => $form_state['values']['field_token_entity_id'][LANGUAGE_NONE][0]['value'],
+    )));
+  }
+
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles) || in_array(ADMIN_ROLE, $user->roles)) {
+    /*$token_id = $form_state['values']['entity']->id;
+    $path = 'token/' . $token_id . '/view';
+    drupal_goto($path);*/
+    drupal_goto('token/modify');
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function api_tokens_form_eck__entity__form_edit_token_entity_token_entity_bundle_alter(&$form, &$form_state, $form_id) {
+  global $user;
+
+  $token = $form['entity']['#value'];
+  $token_amount = $token->field_token_entity_money_charged[LANGUAGE_NONE][0]['value'];
+  $total_value = $token->field_token_total_value[LANGUAGE_NONE][0]['value'];
+
+  //change some labels
+  //$form['field_token_entity_id'][LANGUAGE_NONE][0]['value']['#title'] = t('Token ID');
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value']['#title'] = t('New Balance');
+
+  $current_balance = '<div class="form-item">';
+  $current_balance .= '<label>'. t('Current Balance') .'</label>';
+  $current_balance .= '<span>'. commerce_currency_format($token_amount,'USD',NULL,FALSE) .'</span>';
+  $current_balance .= '</div>';
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE]['#prefix'] = $current_balance;
+
+  $total = '<div class="form-item">';
+  $total .= '<label>'. t('Total Value') .'</label>';
+  if ($total_value){
+    $total .= '<span>'. commerce_currency_format($total_value,'USD',NULL,FALSE) .'</span>';
+  } else {
+    $total .= '<span>'. t('N/A') .'</span>';
+  }
+  $total .= '</div>';
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE]['#suffix'] = $total;
+
+  //remove none option in fields with Chosen enabled to avoid the user to select None + other options
+  unset($form['field_token_entity_states'][LANGUAGE_NONE]['#options']['_none']);
+  unset($form['field_token_entity_programs'][LANGUAGE_NONE]['#options']['_none']);
+  unset($form['field_token_entity_companies'][LANGUAGE_NONE]['#options']['_none']);
+
+  // Validate charged amount.
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value']['#element_validate'][] = 'api_element_validate_positive_or_zero';
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value']['#maxlength'] = 7;
+  $form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value']['#default_value'] = number_format($token_amount, 2);
+
+  $form['field_token_entity_id'][LANGUAGE_NONE][0]['#disabled'] = TRUE;
+
+  //to remove N/A option
+  $form['field_entity_token_fixed_percent'][LANGUAGE_NONE]['#options'] = array(1 => 'Fixed', 2 => 'Percentage');
+
+  if (!in_array(ADMIN_ROLE, $user->roles)) {
+    $form['field_token_entity_visibility']['#access'] = FALSE;
+    $form['field_token_total_value']['#access'] = FALSE;
+  }
+
+  $form['#attached']['js'] = array(
+          drupal_get_path('module', 'api_tokens') . '/js/api_tokens.js' => array(
+          'type' => 'file',
+          ),
+  );
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+    //$form['field_token_entity_id'][LANGUAGE_NONE][0]['#disabled'] = FALSE;
+  }
+  if (in_array(COMPANY_ADMIN_ROLE, $user->roles)) {
+    $form['field_token_entity_money_charged'][LANGUAGE_NONE][0]['#disabled'] = TRUE;
+    $form['field_token_entity_companies']['#access'] = FALSE;
+    $form['field_token_entity_enabled']['#access'] = FALSE;
+    field_group_hide_field_groups($form, array('group_entity_token_discount'));
+  }
+
+  $form['field_token_entity_balance'] = array(
+    '#type' => 'hidden',
+    '#value' => $token_amount,
+  );
+  $form['#validate'][] = 'api_tokens_edit_custom_validate';
+  $form['#submit'][] = 'api_tokens_form_add_token_entity_submit';
+}
+
+function api_tokens_custom_validate($form, &$form_state) {
+  if (!api_tokens_code_is_valid($form_state['values']['field_token_entity_id'][LANGUAGE_NONE][0]['value'])) {
+    form_set_error('field_token_entity_id', t('The Token ID is not valid (must be 8 characters long, only alphanumeric) or is already in use.'));
+  } else {
+    $form_state['values']['field_token_total_value'][LANGUAGE_NONE][0]['value'] = $form_state['values']['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value'];
+  }
+}
+
+function api_tokens_edit_custom_validate($form, &$form_state) {
+  if (isset($form['field_token_entity_balance']) && isset($form['field_token_entity_balance']['#value'])){
+    $balance = $form['field_token_entity_balance']['#value'];
+    $money_charged = $form_state['values']['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value'];
+    $total_value = $form_state['values']['field_token_total_value'][LANGUAGE_NONE][0]['value'];
+    //$form_state['values']['field_token_entity_money_charged'][LANGUAGE_NONE][0]['value'] = $balance + $money_charged;
+    $form_state['values']['field_token_total_value'][LANGUAGE_NONE][0]['value'] = $total_value + ($money_charged - $balance);
+  }
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function api_tokens_entity_presave($entity, $type) {
+  if ($type == 'token_entity') {
+
+    if ($entity->is_new) {
+
+      $creator = user_load($entity->uid);
+      if (in_array(ADMIN_ROLE, $creator->roles)) {
+        //admin decides visibility by itself
+      }
+      elseif (in_array(CUSTOMER_SUPPORT_ROLE, $creator->roles)) {
+        $entity->field_token_entity_visibility[LANGUAGE_NONE][0]['value'] = TOKEN_VISIBILITY_PUBLIC;
+      }
+      else {
+        $entity->field_token_entity_visibility[LANGUAGE_NONE][0]['value'] = TOKEN_VISIBILITY_PRIVATE;
+      }
+
+    } else {
+
+    }
+
+  }
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
+function api_tokens_form_commerce_cart_add_to_cart_form_alter(&$form, &$form_state, $form_id) {
+
+  if (!empty($form['product_id']['#value'])) {
+
+    $product = commerce_product_load($form['product_id']['#value']);
+
+    if (!empty($product) && $product->type == TOKEN_PRODUCT_TYPE) {
+      global $user;
+
+      $parameters = drupal_get_query_parameters();
+
+      if (array_key_exists('id', $parameters)){
+        $token_id = $parameters['id'];
+        $token = reset(entity_load(TOKEN_ENTITY, array($token_id),array('type' => TOKEN_ENTITY_BUNDLE)));
+        if ($token){
+          $token_code = $token->field_token_entity_id[LANGUAGE_NONE][0]['value'];
+        }
+      }
+
+      if (!isset($token) || !$token) {
+        $token_id = NULL;
+        $token_code = api_tokens_generate_token_code();
+      }
+
+      $form['#attached']['js'] = array(
+              drupal_get_path('module', 'api_tokens') . '/js/api_tokens.js' => array(
+              'type' => 'file',
+              ),
+      );
+
+      drupal_set_title(t('Token'));
+
+      $form['line_item_fields']['field_money_charged'][LANGUAGE_NONE][0]['value']['#title'] = $token_id ? t('Add Funds'):t('Token Amount');
+      $form['line_item_fields']['field_money_charged'][LANGUAGE_NONE][0]['value']['#maxlength'] = 7;
+      $form['line_item_fields']['field_money_charged'][LANGUAGE_NONE][0]['value']['#size'] = 7;
+      $form['line_item_fields']['field_money_charged'][LANGUAGE_NONE][0]['value']['#element_validate'][] = 'api_element_validate_positive';
+      $form['line_item_fields']['field_money_charged'][LANGUAGE_NONE][0]['value']['#field_prefix'] = '$';
+
+      $form['line_item_fields']['field_token_id'][LANGUAGE_NONE][0]['value']['#title'] = t('Token ID');
+      $form['line_item_fields']['field_token_id'][LANGUAGE_NONE][0]['value']['#default_value'] = $token_code;
+      $form['line_item_fields']['field_token_id'][LANGUAGE_NONE][0]['value']['#attributes'] = array(
+        'class' => array('readonly-input'),
+        'readonly' => 'readonly',
+      );
+
+      $form['line_item_fields']['field_allowed_companies']['#access'] = FALSE;
+      $form['line_item_fields']['field_visibility']['#access'] = FALSE;
+      $form['line_item_fields']['field_enabled']['#access'] = FALSE;
+      $form['line_item_fields']['field_fixed_percentage']['#access'] = FALSE;
+      $form['line_item_fields']['field_discount_value']['#access'] = FALSE;
+      $form['line_item_fields']['field_applicable_states']['#weight'] = 9;
+      $form['line_item_fields']['field_applicable_programs']['#weight'] = 8;
+      $form['line_item_fields']['field_applicable_states'][LANGUAGE_NONE]['#title'] = t('U.S. States');
+      if ((!in_array(COMPANY_ADMIN_ROLE, $user->roles) && !in_array(ADMIN_ROLE, $user->roles)) || $token_id) {
+        $form['line_item_fields']['field_applicable_states']['#access'] = FALSE;
+        $form['line_item_fields']['field_applicable_programs']['#access'] = FALSE;
+        $form['line_item_fields']['field_date_from_to']['#access'] = FALSE;
+      }
+      $form['#submit'][] = 'api_tokens_form_commerce_cart_add_to_cart_form_submit';
+      $form['#validate'][] = 'api_tokens_form_commerce_cart_add_to_cart_form_validate';
+    }
+
+  }
+
+}
+
+/**
+ * Implements hook_date_combo_process_alter().
+ */
+function api_tokens_date_combo_process_alter(&$element, &$form_state, &$context) {
+  $element['show_todate']['#title'] = t('Enable End Date');
+}
+/**
+ * Form submit.
+ */
+function api_tokens_form_commerce_cart_add_to_cart_form_submit(&$form, &$form_state, $form_id) {
+  $form_state['redirect'] = 'cart';
+}
+/**
+ * Form validation.
+ */
+function api_tokens_form_commerce_cart_add_to_cart_form_validate(&$form, &$form_state, $form_id) {
+
+  $parameters = drupal_get_query_parameters();
+
+  if (!api_tokens_code_is_valid($form_state['values']['line_item_fields']['field_token_id'][LANGUAGE_NONE][0]['value']) && !array_key_exists('id', $parameters)) {
+    form_set_error('field_token_entity_id', t('The Token ID is not valid (must be 8 characters long, only alphanumeric) or is already in use.'));
+  }
+
+  // Limit decimal to two numbers max (if any decimals).
+  $token_value = $form_state['values']['line_item_fields']['field_money_charged'][LANGUAGE_NONE][0]['value'];
+  $token_value = floor($token_value * 100) / 100;
+  $form_state['values']['line_item_fields']['field_money_charged'][LANGUAGE_NONE][0]['value'] = $token_value;
+}
+/**
+ * Implements hook_commerce_checkout_complete().
+ */
+function api_tokens_commerce_checkout_complete($order) {
+
+  $ow = entity_metadata_wrapper('commerce_order', $order);
+  foreach ($ow->commerce_line_items as $line_item) {
+    // Is a token item?
+    if ($line_item->type->value() != TOKEN_LINE_ITEM_TYPE) {
+      // Skip line item.
+      continue;
+    }
+
+    // Load line item.
+    $line_item_token = commerce_line_item_load($line_item->line_item_id->value());
+
+    // Token Code / ID
+    $token_code = $line_item->field_token_id->value();
+    $token_id = _get_token_by_code($token_code);
+
+    if ($token_id){
+      $token = reset(entity_load(TOKEN_ENTITY, array($token_id),array('type' => TOKEN_ENTITY_BUNDLE)));
+      $token_amount = $token->field_token_entity_money_charged[LANGUAGE_NONE][0]['value'];
+      $token_total_value = $token->field_token_total_value[LANGUAGE_NONE][0]['value'];
+      $line_item_amount = $line_item_token->field_money_charged[LANGUAGE_NONE][0]['value'];
+
+      $token->field_token_entity_money_charged[LANGUAGE_NONE][0]['value'] = $token_amount + $line_item_amount;
+      $token->field_token_total_value[LANGUAGE_NONE][0]['value'] = $token_total_value + $line_item_amount;
+    } else {
+
+      // Create a new token.
+      $token = entity_create(TOKEN_ENTITY, array('type' => TOKEN_ENTITY_BUNDLE));
+      $token->created = time();
+      $token->uid = $order->uid;
+      $token->title = 'Token ' . $token_code;
+
+      $order_user = user_load($order->uid);
+      // If company admin user or regular user, assign company reference.
+      if (!empty($order_user) && (in_array(COMPANY_ADMIN_ROLE, $order_user->roles) || (count($order_user->roles) == 1 && in_array(AUTHENTICATED_USER_ROLE, $order_user->roles)))) {
+        $user_company = _get_user_company($order_user->uid);
+        $token->field_token_entity_companies = array(LANGUAGE_NONE => array(0 => array('target_id' => $user_company)));
+      } else {
+        $token->field_token_entity_companies = $line_item_token->field_allowed_companies;
+      }
+      $token->field_token_entity_programs = $line_item_token->field_applicable_programs;
+      $token->field_token_entity_states = $line_item_token->field_applicable_states;
+      $token->field_token_entity_date_from_to = $line_item_token->field_date_from_to;
+      $token->field_entity_tokendiscount_value = $line_item_token->field_discount_value;
+      $token->field_token_entity_enabled = $line_item_token->field_enabled;
+      $token->field_entity_token_fixed_percent = $line_item_token->field_fixed_percentage;
+      $token->field_token_entity_money_charged = $line_item_token->field_money_charged;
+      $token->field_token_total_value = $line_item_token->field_money_charged;
+      $token->field_token_entity_id = $line_item_token->field_token_id;
+      $token->field_token_entity_visibility = $line_item_token->field_visibility;
+
+    }
+
+    entity_save(TOKEN_ENTITY, $token);
+  }
+
+}
+
+/**
+ * Implements hook_views_query_alter.
+ */
+function api_tokens_views_query_alter(&$view, &$query) {
+  // Allow OR conditionals instead of AND.
+  if ($view->name == 'tokens_list') {
+    global $user;
+    $company_nid = _get_user_company($user->uid);
+    $query->where[2]['conditions'][0]['value'] = $user->uid;
+    $query->where[2]['conditions'][1]['value'] = $company_nid;
+  }
+  
+  if ($view->name == 'company_admin_tokens_list') {
+    global $user;
+    $company_nid = _get_user_company($user->uid);
+    $query->where[2]['conditions'][0]['value'] = $company_nid;
+  }
+}
+
+/**
+ * Implements hook_views_post_execute.
+ */
+function api_tokens_views_post_execute(&$view) {
+  global $user;
+  // Remove private and without company tokens created by other users.
+  if($view->name=="tokens_list") {
+    foreach ($view->result as $id => $result ) {
+      $company = $result->field_field_token_entity_companies;
+      $visibility = $result->field_field_token_entity_visibility[0]['raw']['value'];
+      $author_uid = $result->users_eck_token_entity_uid;
+      // If the token belongs to another user, is private and does not belong to a company, remove.
+      if (empty($company) && $visibility == 1 && $author_uid != $user->uid) {
+        unset($view->result[$id]);
+        $view->total_rows--;
+      }
+    }
+    $view->result = array_values($view->result);
+  }
+}
+
+/**
+ * user/%/tokens menu access callback.
+ */
+function api_tokens_render_user_tokens_access() {
+  global $user;
+  $roles = array_intersect(array('anonymous user', 'customer support', 'antea user'), $user->roles);
+  if (!empty($roles)) {
+    return FALSE;
+  } else {
+    // If we got here, it's because the user is authenticated (and might or might not be companyAdmin).
+    // But being Auth and not the previous roles is enough to access the list.
+    return TRUE;
+  }
+}
+
+/**
+ * user/%/tokens menu callback.
+ * Render tokens list.
+ */
+function api_tokens_render_user_tokens($arg) {
+    global $user;
+    // Because Blocks don't set page title (pages do).
+    drupal_set_title(t('My Tokens'));
+    $company_nid = _get_user_company($user->uid);
+    // List all tokens for use's compnay and tokens created by user.
+    $data = views_embed_view('tokens_list', 'block_tokens_list');
+
+    // "Create Token" link to render on Tokens List.
+    $token_nid = variable_get('token_node_nid', '');
+    $create = '<div class="new_token">' . l(t('Create Token'), 'node/' . $token_nid, array('attributes' => array('class' => array('button', 'primary')))) . '</div>';
+
+    $export_url = 'user/' . $company_nid . '/export-tokens/' . $user->uid;
+
+    //a way of checking if the view has content, because unfortunately even when
+    //the view has no results, views_embed_view still returns some html
+    if (strpos($data, 'view-content') !== FALSE) {
+      $export = l(t('Export'), $export_url, array('attributes' => array('id' => 'tokens-export-link')));
+    }
+    else {
+      $export = '';
+    }
+
+    return $create . $data . $export;
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function api_tokens_views_api() {
+  // Let Drupal listen to our module's temapltes.
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'api_tokens'),
+    'template path' => drupal_get_path('module', 'api_tokens') . '/templates',
+  );
+}
+
+/**
+ * Implements hook_views_pre_render().
+ */
+function api_tokens_views_pre_render(&$view) {
+  global $user;
+  $roles = in_array('company admin', $user->roles);
+  if ($roles) {
+    $view->is_company_admin = TRUE;
+  } else {
+    $view->is_company_admin = FALSE;
+  }
+  $view->user_uid = $user->uid;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function api_tokens_menu_alter(&$items) {
+  $items['admin/structure/entity-type/token_entity/token_entity_bundle/%eckentity/edit']['access callback'] = '_api_tokens_entity_custom_access';
+  $items['admin/structure/entity-type/token_entity/token_entity_bundle/%eckentity/edit']['access arguments'] = array(5);
+  $items['admin/structure/entity-type/token_entity/token_entity_bundle/%eckentity/edit']['title'] = 'Modify Token';
+  $items['admin/structure/entity-type/token_entity/token_entity_bundle/add']['title'] = 'Create Token';
+}
+
+function _api_tokens_entity_custom_access($token) {
+  global $user;
+
+  if (in_array(ADMIN_ROLE, $user->roles) || in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+    //customer support and admin can edit any token
+    return TRUE;
+  }
+  else if (in_array(COMPANY_ADMIN_ROLE, $user->roles)) {
+
+    //company admin can only edit its own company tokens
+    $user_company_id = _get_user_company($user->uid);
+    foreach ($token->field_token_entity_companies[LANGUAGE_NONE] as $token_company) {
+      if ($token_company['target_id'] == $user_company_id) {
+        return TRUE;
+      }
+    }
+  }
+
+  //rest of users cannot edit tokens
+  return FALSE;
+}
+
+/**
+ * Implements HOOK_custom_theme().
+ */
+function api_tokens_custom_theme() {
+  global $user;
+  //customer support role always uses the admin theme.
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+    return variable_get('admin_theme', 'commerce_kickstart_admin');
+  } else if (in_array(ADMIN_ROLE, $user->roles) && arg(0) == 'token') {
+    return variable_get('admin_theme', 'commerce_kickstart_admin');
+  }
+
+}
+
+function api_element_validate_positive($element, &$form_state) {
+  $value = $element ['#value'];
+  if ($value != '' && (!is_numeric($value) || $value <= 0)) {
+    form_error($element, t('%name must be a positive number.', array('%name' => $element ['#title'])));
+  }
+}
+
+function api_element_validate_positive_or_zero($element, &$form_state) {
+  $value = $element ['#value'];
+  if ($value != '' && (!is_numeric($value) || $value < 0)) {
+    form_error($element, t('%name must be a positive number.', array('%name' => $element ['#title'])));
+  }
+}
+
+/**
+ * Implements hook_entity_view_alter().
+ */
+function api_tokens_entity_view_alter(&$build, $type) {
+  global $user;
+  switch ($type) {
+    case TOKEN_ENTITY:
+      $token = $build['#entity'];
+      //hide visibility field for non-admins
+      if (!in_array(ADMIN_ROLE, $user->roles)) {
+        unset($build['field_token_entity_visibility']);
+      }
+
+      //change some labels
+      //$build['field_token_entity_id']['#title'] = t('Token ID');
+      //$build['field_token_entity_money_charged']['#title'] = t('Purchase Token');
+
+      //show a value for enabled field
+      $enabled_value = $token->field_token_entity_enabled[LANGUAGE_NONE][0]['value'] ? t('Yes') : t('No');
+      $build['field_token_entity_enabled'][0]['#markup'] = $enabled_value;
+
+      break;
+  }
+}
+
+/**
+ * Implements hook_commerce_price_component_type_info().
+ */
+function api_tokens_commerce_price_component_type_info() {
+  $types['token'] = array(
+    'title' => t('Token')
+  );
+
+  return $types;
+}
+
+/**
+ * Remove token components from a given price and recalculate the total.
+ *
+ * @param $price_wrapper
+ *   Wrapped commerce price.
+ */
+function api_tokens_remove_token_components($price_wrapper) {
+  $data = $price_wrapper->data->value();
+  $component_removed = FALSE;
+  // Remove price components belonging to tokens.
+  foreach ($data['components'] as $key => $component) {
+    if ($component['name'] == 'token') {
+      unset($data['components'][$key]);
+      $component_removed = TRUE;
+    }
+  }
+  // Don't alter the price components if no components were removed.
+  if (!$component_removed) {
+    return;
+  }
+
+  // Re-save the price without the token (if existed).
+  $price_wrapper->data->set($data);
+
+  // Re-set the total price.
+  $total = commerce_price_component_total($price_wrapper->value());
+  $price_wrapper->amount->set($total['amount']);
+}
+
+/**
+ * Implements hook_commerce_payment_method_info().
+ */
+function api_tokens_commerce_payment_method_info() {
+  $payment_methods = array();
+
+  $payment_methods['token_payment'] = array(
+    'title' => t('Token payment'),
+    'description' => t('Token payment method.'),
+    'active' => TRUE,
+  );
+
+  return $payment_methods;
+}
+
+/**
+ * Payment method callback: submit form.
+ */
+function token_payment_submit_form($payment_method, $pane_values, $checkout_pane, $order) {
+  module_load_include('inc', 'api_tokens', 'api_tokens.payment');
+
+  return api_tokens_payment_form();
+}
+
+/**
+ * Payment method callback: submit form validation.
+ */
+function token_payment_submit_form_validate($payment_method, $pane_form, $pane_values, $order, $form_parents = array()) {
+  // validate token code.
+  module_load_include('inc', 'api_tokens', 'api_tokens.payment');
+
+  $settings = array(
+    'form_parents' => array_merge($form_parents, array('token')),
+  );
+
+  // Even though a form error triggered by the validate handler would be enough
+  // to stop the submission of the form, it's not enough to stop it from a
+  // Commerce standpoint because of the combined validation / submission going
+  // on per-pane in the checkout form. Thus even with a call to form_set_error()
+  // this validate handler must still return FALSE.
+  if (!api_tokens_payment_validate($pane_values['token'], $settings, $order)) {
+    return FALSE;
+  }
+}
+
+/**
+ * Payment method callback: submit form submission.
+ */
+function token_payment_submit_form_submit($payment_method, $pane_form, $pane_values, $order, $charge) {
+
+  $order->data['token_payment'] = $pane_values;
+
+  // Every attempted transaction should result in a new transaction entity being
+  // created for the order to log either the success or the failure.
+  token_payment_transaction($payment_method, $order, $charge);
+}
+
+/**
+ * Creates an token transaction for the specified charge amount.
+ *
+ * @param $payment_method
+ *   The payment method instance object used to charge this payment.
+ * @param $order
+ *   The order object the payment applies to.
+ * @param $charge
+ *   An array indicating the amount and currency code to charge.
+ */
+function token_payment_transaction($payment_method, $order, $charge) {
+  $token_details = $order->data['token_payment']['token'];
+
+  $transaction = commerce_payment_transaction_new('token_payment', $order->order_id);
+  $transaction->instance_id = $payment_method['instance_id'];
+  $transaction->amount = $charge['amount'];
+  $transaction->currency_code = $charge['currency_code'];
+  $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+
+  $transaction->message = 'Token: @code';
+  $transaction->message_variables = array(
+    '@code' => $token_details['code'],
+  );
+
+  commerce_payment_transaction_save($transaction);
+
+  return $transaction;
+}
+
+/**
+ * Implements hook_commerce_payment_order_paid_in_full().
+ */
+function api_tokens_commerce_payment_order_paid_in_full($order, $transaction) {
+  // Update token(s).
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    if ($line_item_wrapper->type->value() == TOKEN_USE_LINE_ITEM_TYPE) {
+      // Get token wrapper.
+      $token_wrapper = $line_item_wrapper->field_token;
+      // Get line item amount.
+      $data = $line_item_wrapper->commerce_total->data->value();
+      // Get used token amount
+      $amount = $line_item_wrapper->field_token_amount->amount->value();
+
+      // Calculate token balance (only if money from the token balance was used).
+      if ($amount > 0) {
+        $amount = $amount / 100;
+        $token_charged = $token_wrapper->field_token_entity_money_charged->value();
+        $token_wrapper->field_token_entity_money_charged = $token_charged - $amount;
+        $token_wrapper->save();
+      }
+
+      // Check if is a company's Token Code.
+      $companies = $token_wrapper->field_token_entity_companies->value();
+      if ($token_wrapper->field_token_entity_visibility ->value() == TOKEN_VISIBILITY_PRIVATE && !empty($companies) && count($companies) == 1) {
+        $company = $companies[0];
+        // Get company administrators.
+        $company_admins_uids = _get_company_admins($company->nid);
+        if (!empty($company_admins_uids)) {
+          $company_admins = user_load_multiple($company_admins_uids);
+          $emails = $company_admins;
+          // Get company administrators emails.
+          array_walk($emails, '_get_object_property', 'mail');
+          // Get order details.
+          $view = views_get_view('commerce_cart_summary');
+          $view->set_arguments(array($order->order_number));
+          $view->hide_admin_links = TRUE;
+          $body = '<div class="message-wrapper"><div class="header">
+                  <div class="thank-you">&nbsp;</div>
+                  <div class="thank-you">' . t('THANK YOU') . '</div></div><div class="body">
+                  <div class="order-summary-wrapper"><p>';
+          $body .= t('Date: @date', array('@date' => date('m/d/Y', $order->changed)));
+          $body .= '</p><p>';
+          $body .= $view->preview();
+          $body .= '</p></div><p>-- ' . t('API WorkSafe team.') . '</p></div>';
+          $subject = t('API WorkSafe - Order @order_number', array('@order_number' => $order->order_number));
+
+          $content = array();
+          $content['language'] = language_default();
+          $content['email_from'] = variable_get('system_mail', 'no-reply@api.org');
+          $content['params'] = array(
+            'headers' => array(
+              'MIME-Version' => '1.0',
+              'Content-Type' => 'text/html; charset=UTF-8; format=flowed',
+              'Content-Transfer-Encoding' => '8Bit',
+              'X-Mailer' => 'Drupal'
+            ),
+            'subject' => $subject,
+            'message' => $body,
+          );
+          foreach ($emails as $uid => $email) {
+            // Do not send this email to order's owner.
+            if ($uid != $order->uid) {
+              $message = drupal_mail('api_tokens', 'company_admin_order_notification', $email, $content['language'], $content['params'], $content['email_from']);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Get a token id.
+ */
+function _get_token_by_code($code) {
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', TOKEN_ENTITY)
+      ->fieldCondition('field_token_entity_id', 'value', $code, '=');
+
+  $result = $query->execute();
+  if (!empty($result)) {
+    $token = array_values($result['token_entity']);
+    return $token[0]->id;
+  }
+  return FALSE;
+}
+/**
+ * Implements hook_commerce_line_item_type_info_alter().
+ */
+function api_tokens_commerce_line_item_type_info_alter(&$line_item_types) {
+  // Remove product functionallity from token use line item.
+  unset($line_item_types['token_use_line_item']['product']);
+}
+
+/**
+ * Implements hook_commerce_cart_order_refresh().
+ */
+function api_tokens_commerce_cart_order_refresh($order_wrapper) {
+  $order = $order_wrapper->value();
+  $line_item_data = array();
+  $delete_line_item_ids = array();
+  $product_line_items = array();
+  $token_line_items = array();
+  $commerce_coupon_line_items = array();
+  $coupons = $order_wrapper->commerce_coupon_order_reference->value();
+
+  // First, clean up token use line item price component.
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    if ($line_item_wrapper->type->value() == TOKEN_LINE_ITEM_TYPE) {
+      $line_item_wrapper->commerce_product->title = t('Token');
+    }
+    if ($line_item_wrapper->type->value() == TOKEN_USE_LINE_ITEM_TYPE) {
+      // Set token line item prices to zero. We always have to recalculate the price, similar to how commerce
+      // discount works.
+      api_tokens_remove_token_components($line_item_wrapper->commerce_unit_price);
+      api_tokens_remove_token_components($line_item_wrapper->commerce_total);
+    }
+    if ($line_item_wrapper->type->value() == 'product') {
+      $product_line_items[] = $line_item_wrapper->line_item_id->value();
+      if (!empty($coupons)) {
+        api_tokens_validate_line_item_coupons($order_wrapper, $line_item_wrapper);
+      }
+    }
+    if ($line_item_wrapper->type->value() == 'commerce_coupon') {
+      $commerce_coupon_line_items[] = $line_item_wrapper->commerce_coupon_reference->value();
+    }
+  }
+  // Strip out token components from order total.
+  api_tokens_remove_token_components($order_wrapper->commerce_order_total);
+
+  // Create a list of line items in the order keyed by token id so that if
+  // necessary we can reference/delete them later if they no longer are valid.
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    if ($line_item_wrapper->type->value() == TOKEN_USE_LINE_ITEM_TYPE) {
+      // Recalculate token ammount.
+      $token_id = $line_item_wrapper->field_token->id->value();
+      $token_line_items[] = $line_item_wrapper->line_item_id->value();
+      $line_item_data[$token_id] = array(
+        'line_item' => clone($line_item_wrapper),
+        'delta' => $delta,
+      );
+
+      $token_wrapper = $line_item_wrapper->field_token;
+      $token_amount = api_tokens_get_order_token_amount($token_wrapper, $order_wrapper);
+      // Evaluate conditions Token Code conditions.
+      if (!$token_amount['enabled'] ||
+        !api_tokens_validate_personal_token_code($token_wrapper, $order_wrapper) ||
+        !api_tokens_validate_company_token_code($token_wrapper, $order_wrapper) ||
+        !api_tokens_validate_customer_support_token_code($token_wrapper, $order_wrapper) ||
+        (empty($token_amount['discount']) && empty($token_amount['amount'])) ||
+        empty($token_amount['token_balance'])
+        ) {
+        // This line item is not longer valid.
+        $delete_line_item_ids[] = $line_item_wrapper->line_item_id->value();
+      } else {
+        $token_price = $token_amount['discount'] + $token_amount['amount'];
+        $price = array(
+          'amount' => -$token_price,
+          'currency_code' => commerce_default_currency()
+        );
+        // Set the amount of money used from the token balance.
+        $line_item_wrapper->field_token_amount->amount = $token_amount['amount'];
+        $line_item_wrapper->field_token_amount->currency_code = commerce_default_currency();
+        // Set the discount applied.
+        $line_item_wrapper->field_token_discount->amount = $token_amount['discount'];
+        $line_item_wrapper->field_token_discount->currency_code = commerce_default_currency();
+
+        api_tokens_line_item_set_price($price, $line_item_wrapper, $token_wrapper);
+        $line_item_wrapper->save();
+
+        // Recalculate order total, then re-wrap the order so that the wrapper picks up any price changes.
+        commerce_order_calculate_total($order);
+        $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+      }
+    }
+  }
+
+  if (empty($product_line_items)) {
+    // If car is empty, remove all tokens.
+    commerce_line_item_delete_multiple(array_values($token_line_items));
+    // Also, remove all promotional codes.
+    if (!empty($coupons)) {
+      foreach ($coupons as $coupon) {
+        commerce_coupon_remove_coupon_from_order($order, $coupon);
+      }
+      drupal_set_message(t('Promotional Codes only applicable to programs.'), 'error', FALSE);
+      commerce_order_calculate_total($order);
+      $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+    }
+  } else {
+    // Remove invalid token codes.
+    commerce_line_item_delete_multiple(array_values($delete_line_item_ids));
+  }
+  $order_amount = $order_wrapper->commerce_order_total->amount->value();
+  // remove promotional code if order total <=0
+  if ($order_amount <= 0 && !empty($coupons)) {
+    drupal_set_message(t('The promotional code can not cover the total value of the purchase.'), 'error', FALSE);
+    // remove all promotional codes.
+    foreach ($coupons as $coupon) {
+      commerce_coupon_remove_coupon_from_order($order, $coupon);
+    }
+    commerce_order_calculate_total($order);
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  }
+}
+
+/**
+ * Determine the amount of a particular token that is eligible to apply
+ * against an order. Uses a static cache.
+ *
+ * @param EntityDrupalWrapper $order_wrapper
+ * @param EntityDrupalWrapper $token_wrapper
+ * @param type $reset
+ * @return type
+ */
+function api_tokens_order_token_amount(EntityDrupalWrapper $order_wrapper, EntityDrupalWrapper $token_wrapper, $reset = FALSE) {
+  $cache = &drupal_static(__FUNCTION__);
+  $token_id = $token_wrapper->id->value();
+  if ($reset || !isset($cache[$token_id])) {
+    $order_amount = $order_wrapper->commerce_order_total->amount->value();
+
+    // Calculate the amount of the token that may be applied.
+    $balance_amount = api_tokens_token_balance($token_id);
+
+    $cache[$token_id] = $order_amount < $balance_amount ? $order_amount : $balance_amount;
+  }
+
+  return $cache[$token_id];
+}
+
+/**
+ * Compute the balance for a particular token.
+ *
+ * @param type $coupon_id
+ * @return type
+ */
+function api_tokens_token_balance($token_id, $for_update = FALSE) {
+  $tokens = entity_load(TOKEN_ENTITY, array($token_id));
+  $token = reset($tokens);
+  $token_wrapper = entity_metadata_wrapper(TOKEN_ENTITY, $token);
+  $balance_amount = $token_wrapper->field_token_entity_money_charged->value() * 100;
+
+  return $balance_amount ? $balance_amount : 0;
+}
+
+/**
+ * Set the price of a token line item.
+ *
+ * @param array $price
+ * @param EntityDrupalWrapper $line_item_wrapper
+ * @param EntityDrupalWrapper $coupon_wrapper
+ */
+function api_tokens_line_item_set_price($price, EntityDrupalWrapper $line_item_wrapper, EntityDrupalWrapper $token_wrapper) {
+  // Initialize the line item unit price.
+  $line_item_wrapper->commerce_unit_price->amount = $price['amount'];
+  $line_item_wrapper->commerce_unit_price->currency_code = $price['currency_code'];
+
+  // Reset the data array of the line item total field to only include a
+  // base price component, set the currency code from the order.
+  $base_price = array(
+    'amount' => 0,
+    'currency_code' => $price['currency_code'],
+    'data' => array(),
+  );
+  //$component_title .= $token_wrapper->title->value() ? $token_wrapper->title->value() : 'token';
+  $component_title = t('Token @token_id', array('@token_id' => $token_wrapper->field_token_entity_id->value()));
+  // Add some data elements to the price
+
+  $price['data'] = array(
+    'token_component_title' => $component_title,
+    'order_id' => $line_item_wrapper->order_id->value()
+  );
+
+  // Set components and save.
+  $line_item_wrapper->commerce_unit_price->data = commerce_price_component_add($base_price, 'token', $price, TRUE);
+}
+
+/**
+ * Calculate token amount for a given order.
+ *
+ * @param EntityDrupalWrapper $token_wrapper
+ * @param EntityDrupalWrapper $order_wrapper
+ * @return array $token_amount
+ *  An array with applicable amounts.
+ *    - $token_amount['discount'] : fixed amount to discount.
+ *    - $token_amount['amount'] : amount used from token balance.
+ *    - $token_amount['remaining'] : remaining amount to complete the order total.
+ */
+function api_tokens_get_order_token_amount(EntityDrupalWrapper $token_wrapper, EntityDrupalWrapper $order_wrapper) {
+  $token_amount = array();
+  // Enabled by default.
+  $token_amount['enabled'] = TRUE;
+  $token_amount['discount'] = 0;
+  $token_amount['amount'] = 0;
+  $token_amount['remaining'] = 0;
+  // Check if it's a valid token(expiration date/enabled)
+  $token_enabled = $token_wrapper->field_token_entity_enabled->value();
+
+  $date = $token_wrapper->field_token_entity_date_from_to->value();
+  $time = time();
+  if (!$token_enabled ||
+    ((!empty($date['value']) && $date['value'] >= $time) || (!empty($date['value2']) && ($date['value2'] + 24*60*60) < $time))) {
+    $token_amount['enabled'] = FALSE;
+    if (!empty($date['value']) && !empty($date['value2']) && $date['value'] == $date['value2'] && $date['value'] < $time) {
+      $token_amount['enabled'] = TRUE;
+    } else {
+      return $token_amount;
+    }
+  }
+
+  //$order_amount = $order_wrapper->commerce_order_total->amount->value();
+  $order_amount = 0;
+  // calculate amount applicable to the order.
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    // validate line item + token
+    if ($line_item_wrapper->type->value() == 'product' && api_tokens_validate_state_programs_token_line_item($token_wrapper, $line_item_wrapper)) {
+      $order_amount += $line_item_wrapper->commerce_total->amount->value();
+    }
+    if ($line_item_wrapper->type->value() == TOKEN_USE_LINE_ITEM_TYPE || $line_item_wrapper->type->value() == 'commerce_coupon') {
+      $order_amount += $line_item_wrapper->commerce_total->amount->value();
+    }
+  }
+
+  $balance_amount = $token_wrapper->field_token_entity_money_charged->value() * 100;
+  $token_amount['token_balance'] = $balance_amount;
+  $type_discount = $token_wrapper->field_entity_token_fixed_percent->value();
+  $tokendiscount_value = $token_wrapper->field_entity_tokendiscount_value->value();
+  $discount_amount = 0;
+  if (!empty($type_discount) && !empty($tokendiscount_value)) {
+    // The token has a discount.
+    if ($type_discount == TOKEN_PERCENT_DISCOUNT) {
+      // Calculate order discount.
+      $discount_amount = round($order_amount * ($tokendiscount_value / 100), 2);
+    }
+    if ($type_discount == TOKEN_FIXED_DISCOUNT) {
+      $discount_amount = $tokendiscount_value * 100;
+    }
+
+    if ($discount_amount < $order_amount) {
+      $token_amount['discount'] = $discount_amount;
+      // Calculate remaining order total.
+      $left_money = $order_amount - $discount_amount;
+      if ($balance_amount >= $left_money) {
+        $token_amount['amount'] = $left_money;
+      } else {
+        // Use the remaining token balance.
+        $token_amount['amount'] = $balance_amount;
+        $token_amount['remaining'] = $left_money - $balance_amount;
+      }
+    } else {
+      $token_amount['discount'] = $order_amount;
+      // In this case we do not use money form the token balance.
+      $token_amount['amount'] = 0;
+    }
+  } else {
+    if ($balance_amount < $order_amount) {
+      $token_amount['amount'] = $balance_amount;
+      $token_amount['remaining'] = $order_amount - $balance_amount;
+    } else {
+      $token_amount['amount'] = $order_amount;
+    }
+  }
+
+  return $token_amount;
+}
+
+/**
+ * Validate if Token Code belongs to order's user.
+ */
+function api_tokens_validate_personal_token_code(EntityDrupalWrapper $token_wrapper, EntityDrupalWrapper $order_wrapper) {
+  $companies = $token_wrapper->field_token_entity_companies->value();
+  // Check if Token Code is personal.
+  if ($token_wrapper->field_token_entity_visibility->value() == TOKEN_VISIBILITY_PRIVATE && empty($companies)) {
+    if ($order_wrapper->uid->value() != $token_wrapper->uid->value()->uid) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/**
+ * Validate if Token Code belongs to a company.
+ */
+function api_tokens_validate_company_token_code(EntityDrupalWrapper $token_wrapper, EntityDrupalWrapper $order_wrapper) {
+  $valid = TRUE;
+  $user_company_nid = _get_user_company($order_wrapper->uid->value());
+  $companies = $token_wrapper->field_token_entity_companies->value();
+  // Check if is a company Token Code.
+  if ($token_wrapper->field_token_entity_visibility ->value() == TOKEN_VISIBILITY_PRIVATE && !empty($companies) && count($companies) == 1) {
+    $company = $companies[0];
+    if ($user_company_nid != $company->nid) {
+      $valid = FALSE;
+    }
+  }
+  return $valid;
+}
+
+/**
+ * Validate if Token Code belongs to a customer support.
+ */
+function api_tokens_validate_customer_support_token_code(EntityDrupalWrapper $token_wrapper, EntityDrupalWrapper $order_wrapper) {
+  $valid = TRUE;
+  $user_company_nid = _get_user_company($order_wrapper->uid->value());
+  $companies = $token_wrapper->field_token_entity_companies->value();
+  // Check if is a customer support Token Code.
+  if ($token_wrapper->field_token_entity_visibility ->value() == TOKEN_VISIBILITY_PUBLIC) {
+    if (!empty($companies)) {
+      array_walk($companies, '_get_object_property', 'nid');
+      if (!in_array($user_company_nid, $companies)) {
+        $valid = FALSE;
+      }
+    }
+  }
+  return $valid;
+}
+
+/**
+ * Validate states and programs
+ */
+function api_tokens_validate_state_programs_token_code(EntityDrupalWrapper $token_wrapper, EntityDrupalWrapper $order_wrapper) {
+  $valid = TRUE;
+  $token_states = $token_wrapper->field_token_entity_states->value();
+  $token_programs = $token_wrapper->field_token_entity_programs->value();
+  // Get programs node id.
+  array_walk($token_programs, '_get_object_property', 'nid');
+  // Check if a line item does not reach the conditions.
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    if ($line_item_wrapper->type->value() == 'product') {
+      $state = $line_item_wrapper->field_order_product_state->value();
+      $program = $line_item_wrapper->value()->data['program_nid'];
+      if ((!in_array($state, $token_states) && !empty($token_states) && !empty($state)) || (!in_array($program, $token_programs) && !empty($token_programs))) {
+        // skip this in token amount calc.
+        $valid = FALSE;
+        // Stop here, due we have an invalid condition.
+        break;
+      }
+    }
+  }
+  return $valid;
+}
+
+/**
+ * Validate Line Item states and programs.
+ */
+function api_tokens_validate_state_programs_token_line_item(EntityDrupalWrapper $token_wrapper, EntityDrupalWrapper $line_item_wrapper) {
+  $valid = TRUE;
+  $token_states = $token_wrapper->field_token_entity_states->value();
+  $token_programs = $token_wrapper->field_token_entity_programs->value();
+  // Get programs node id.
+  array_walk($token_programs, '_get_object_property', 'nid');
+  // Check if the line item does not reach the conditions.
+  if ($line_item_wrapper->type->value() == 'product') {
+    $state = $line_item_wrapper->field_order_product_state->value();
+    $program = $line_item_wrapper->value()->data['program_nid'];
+    if ((!in_array($state, $token_states) && !empty($token_states)) || (!in_array($program, $token_programs) && !empty($token_programs))) {
+      // skip this in token amount calc.
+      $valid = FALSE;
+    }
+  }
+
+  return $valid;
+}
+
+function api_tokens_entity_view($entity, $type, $view_mode, $langcode) {
+  if ($type == 'token_entity' && $view_mode == 'full'){
+
+    $entity->title = t('Token');
+    $entity->content['field_token_entity_money_charged']['#title'] = t('Balance');
+    $amount = $entity->content['field_token_entity_money_charged']['#items'][0]['value'];
+    $entity->content['field_token_entity_money_charged'][0]['#markup'] = commerce_currency_format($amount,commerce_default_currency(),NULL,FALSE);
+
+    $user = user_load($entity->uid);
+    $markup = '<div class="field field-name-field-token-entity-author field-type-text field-label-above">';
+    $markup .= '<div class="field-label">';
+    $markup .= t('Created By') . ': ';
+    $markup .= '</div>';
+    $markup .= '<div class="field-items">';
+    $markup .= '<div class="field-item even">';
+    $markup .= $user->name;
+    $markup .= '</div>';
+    $markup .= '</div>';
+    $markup .= '</div>';
+
+    $entity->content['field_token_entity_author'] = array(
+        '#weight' => 99,
+        '#markup' => $markup
+    );
+
+    $markup = '<div class="field field-name-field-token-entity-load-amount-link">';
+    $markup .= l(t('Add Funds'),'token/buyreload-token', array('query' => array('id' => $entity->id), 'attributes' => array('class' => array('button','primary'))));
+    $markup .= '</div>';
+    $entity->content['field_token_entity_load_amount_link'] = array(
+        '#weight' => 99,
+        '#markup' => $markup
+    );
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function api_tokens_theme($existing, $type, $theme, $path) {
+  return array(
+    'commerce_price_api_tokens_formatted_components' => array(
+      'variables' => array('components' => array(), 'price' => array()),
+    ),
+    'token_details' => array(
+        'path' => $path . '/templates',
+        'template' => 'token-details',
+        'variables' => array(
+          'details' => NULL,
+        )
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function api_tokens_field_formatter_info() {
+  return array(
+    'commerce_price_api_tokens_formatted_components' => array(
+      'label' => t('API Tokens Formatted components'),
+      'field types' => array('commerce_price'),
+      'settings' => array(
+        'calculation' => FALSE,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function api_tokens_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $translated_instance = commerce_i18n_object('field_instance', $instance);
+
+  $element = array();
+
+  // Loop through each price value in this field.
+  foreach ($items as $delta => $item) {
+    // Do not render a price if the amount is NULL (i.e. non-zero empty value).
+    if (is_null($item['amount'])) {
+      // TODO: Consider if we should render as N/A or something indicating a
+      // price was not available as opposed to just leaving a blank.
+      continue;
+    }
+
+    // Theme the display of the price based on the display type.
+    switch ($display['type']) {
+
+      case 'commerce_price_api_tokens_formatted_components':
+        // Build an array of component display titles and their prices.
+        $components = array();
+        $weight = 0;
+
+        foreach ($item['data']['components'] as $key => $component) {
+          $component_type = commerce_price_component_type_load($component['name']);
+          if ($component['name'] == 'token' && !empty($component['price']['data']['order_id'])) {
+            $order_id = $component['price']['data']['order_id'];
+            $order = commerce_order_load($order_id);
+            $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+            foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+              if ($line_item_wrapper->type->value() == TOKEN_USE_LINE_ITEM_TYPE) {
+                // Get token wrapper.
+                $token_wrapper = $line_item_wrapper->field_token;
+                // Get line item amount.
+                $data = $line_item_wrapper->commerce_total->data->value();
+
+                foreach ($data['components'] as $key => $line_component) {
+                  if ($line_component['name'] == 'token') {
+
+                    $components[$line_component['price']['data']['token_component_title']] = array(
+                      'title' => $line_component['price']['data']['token_component_title'],
+                      'price' => $line_component['price'],
+                      'weight' => $component_type['weight'],
+                    );
+                  }
+                }
+              }
+            }
+          }else{
+            if (empty($components[$component['name']])) {
+              $components[$component['name']] = array(
+                'title' => check_plain($component_type['display_title']),
+                'price' => commerce_price_component_total($item, $component['name']),
+                'weight' => $component_type['weight'],
+              );
+              $weight = max($weight, $component_type['weight']);
+            }
+          }
+        }
+
+        // If there is only a single component and its price equals the field's,
+        // then remove it and just show the actual price amount.
+        if (count($components) == 1 && in_array('base_price', array_keys($components))) {
+          $components = array();
+        }
+
+        // Add the actual field value to the array.
+        $components['commerce_price_formatted_amount'] = array(
+          'title' => check_plain($translated_instance['label']),
+          'price' => $item,
+          'weight' => $weight + 1,
+        );
+
+        // Allow other modules to alter the components.
+        drupal_alter('commerce_price_formatted_components', $components, $item, $entity);
+
+        // Sort the components by weight.
+        uasort($components, 'drupal_sort_weight');
+
+        // Format the prices for display.
+        foreach ($components as $key => &$component) {
+          $component['formatted_price'] = commerce_currency_format(
+            $component['price']['amount'],
+            $component['price']['currency_code'],
+            $entity
+          );
+        }
+
+        $element[$delta] = array(
+          '#markup' => theme('commerce_price_api_tokens_formatted_components', array('components' => $components, 'price' => $item)),
+        );
+        break;
+    }
+  }
+
+  return $element;
+}
+/**
+ * Themes a price components table.
+ *
+ * @param $variables
+ *   Includes the 'components' array and original 'price' array.
+ */
+function theme_commerce_price_api_tokens_formatted_components($variables) {
+  // Add the CSS styling to the table.
+  drupal_add_css(drupal_get_path('module', 'commerce_price') . '/theme/commerce_price.theme.css');
+
+  // Build table rows out of the components.
+  $rows = array();
+
+  foreach ($variables['components'] as $name => $component) {
+
+    $coupon_fixed_title = strstr($name, 'commerce_coupon_fixed');
+    if ($coupon_fixed_title) {
+      $component['title'] = t('Fixed Promotional Code');
+    }
+    $coupon_fixed_title = strstr($name, 'commerce_coupon_pct');
+    if ($coupon_fixed_title) {
+      $component['title'] = t('Percentage Promotional Code');
+    }
+
+    $rows[] = array(
+      'data' => array(
+        array(
+          'data' => $component['title'],
+          'class' => array('component-title'),
+        ),
+        array(
+          'data' => $component['formatted_price'],
+          'class' => array('component-total'),
+        ),
+      ),
+      'class' => array(drupal_html_class('component-type-' . $name)),
+    );
+  }
+
+  return theme('table', array('rows' => $rows, 'attributes' => array('class' => array('commerce-price-formatted-components'))));
+}
+
+/**
+ * Returns an array of payment methods.
+ *
+ * @param EntityDrupalWrapper $order_wrapper
+ */
+function api_tokens_get_order_payment_methods($order_wrapper) {
+  $payment_methods = array();
+  $payment_method = explode('|', $order_wrapper->value()->data['payment_method']);
+  $token_payment = FALSE;
+  if (!in_array('token_payment', $payment_method)) {
+    $payment_methods['credit_card'] = t('Credit Card');
+    // check if the order has a token use line item
+    foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+      if ($line_item_wrapper->type->value() == TOKEN_USE_LINE_ITEM_TYPE) {
+        $token_payment = TRUE;
+        // Stop here.
+        break;
+      }
+    }
+  } else {
+    $token_payment = TRUE;
+  }
+  if ($token_payment) {
+    $payment_methods['token_payment'] = t('Token');
+  }
+  return $payment_methods;
+}
+
+/**
+ * Implements hook_commerce_checkout_router().
+ */
+function api_tokens_commerce_checkout_router($order, $checkout_page) {
+  // redirects complete checkout page to order details.
+  if ($checkout_page['page_id'] == 'complete') {
+    drupal_goto('user/' . $order->uid . '/orders/' . $order->order_number);
+  }
+}
+
+/**
+ * Implements hook_admin_menu_output_alter().
+ */
+function api_tokens_admin_menu_output_alter(&$content) {
+  global $user;
+
+  // Add menu items to customer support users.
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+    // Add new top-level item to the menu.
+    if (isset($content['menu'])) {
+      $content['menu']['token'] = array(
+        '#title' => t('Token Management'),
+        // #attributes are used for list items (LI).
+        '#attributes' => array('class' => array('admin-menu-toolbar-category')),
+        '#href' => '#',
+        // #options are passed to l().
+        '#options' => array(
+          //'query' => drupal_get_destination(),
+          // Apply a class on the link (anchor).
+          'external' => TRUE,
+          'attributes' => array('class' => array('token-management-link-anchor')),
+        ),
+        // #weight controls the order of links in the resulting item list.
+        '#weight' => -20,
+      );
+      $content['menu']['token']['create'] = array(
+        '#title' => t('Create token'),
+        // #attributes are used for list items (LI).
+        '#attributes' => array('class' => array('mymodule-myitem')),
+        '#href' => 'admin/structure/entity-type/token_entity/token_entity_bundle/add',
+        // #options are passed to l().
+        '#options' => array(
+          //'query' => drupal_get_destination(),
+          // Apply a class on the link (anchor).
+          'attributes' => array('class' => array('myitem-link-anchor')),
+        ),
+        // #weight controls the order of links in the resulting item list.
+        '#weight' => 10,
+      );
+      $content['menu']['token']['modify'] = array(
+        '#title' => t('Modify Token'),
+        // #attributes are used for list items (LI).
+        '#attributes' => array('class' => array('mymodule-myitem')),
+        '#href' => 'token/modify',
+        // #options are passed to l().
+        '#options' => array(
+          //'query' => drupal_get_destination(),
+          // Apply a class on the link (anchor).
+          'attributes' => array('class' => array('myitem-link-anchor')),
+        ),
+        // #weight controls the order of links in the resulting item list.
+        '#weight' => 10,
+      );
+    }
+  }
+}
+
+function api_tokens_form_views_exposed_form_alter(&$form, $form_state) {
+  if ($form['#id'] == 'views-exposed-form-token-management-page'){
+    $companies = array('' => t('All'));
+    $companies += api_custom_companies();
+    $form['field_token_entity_companies_target_id']['#type'] = 'select';
+    $form['field_token_entity_companies_target_id']['#options'] = $companies;
+    $form['field_token_entity_companies_target_id']['#size'] = 1;
+  }
+}
+
+function api_tokens_init(){
+  global $user;
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+    drupal_add_js(drupal_get_path('module', 'api_tokens') . '/js/api_tokens.js',array('scope' => 'header'));
+  }
+}
+
+/**
+ * Returns an array of payment methods.
+ *
+ * @param EntityDrupalWrapper $order_wrapper
+ * @param EntityDrupalWrapper $line_item_wrapper
+ */
+function api_tokens_validate_line_item_coupons(EntityDrupalWrapper $order_wrapper, EntityDrupalWrapper &$line_item_wrapper) {
+  global $user;
+  // Get user company ID.
+  $user_company_nid = _get_user_company($user->uid);
+
+  $line_item = $line_item_wrapper->value();
+  // Get program.
+  $product_program = $line_item->data['program_nid'];
+  // Get program state.
+  $product_state = $line_item_wrapper->field_order_product_state->value();
+  // Get coupons list.
+  $coupons = $order_wrapper->commerce_coupon_order_reference->value();
+  foreach ($coupons as $coupon) {
+    $valid_coupon = TRUE;
+    //$coupon_wrapper =  entity_metadata_wrapper('commerce_coupon', $coupon);
+    $programs = _api_custom_field_item('commerce_coupon', $coupon, 'field_commerce_couponprodref', 'target_id', NULL);
+    $companies = _api_custom_field_item('commerce_coupon', $coupon, 'field_company', 'target_id', NULL);
+    $states = _api_custom_field_item('commerce_coupon', $coupon, 'field_states', 'target_id', NULL);
+    // Validate programs.
+    if (!empty($programs) && !empty($product_program)) {
+      $programs_array = array();
+      foreach ($programs as $program) {
+        $programs_array[] = $program['target_id'];
+      }
+      if (!in_array($product_program, $programs_array)) {
+        $valid_coupon = FALSE;
+      }
+    }
+
+    // Validate company
+    if (!empty($companies) && $valid_coupon) {
+      $companies_array = array();
+      foreach ($companies as $company) {
+        $companies_array[] = $company['target_id'];
+      }
+      if (!in_array($user_company_nid, $companies_array)) {
+        $valid_coupon = FALSE;
+      }
+    }
+
+    // Validate States.
+    if (!empty($states) && $valid_coupon) {
+      $states_array = array();
+      foreach ($states as $state) {
+        $states_array[] = $state['value'];
+      }
+      if (!in_array($product_state, $states_array)) {
+        $valid_coupon = FALSE;
+      }
+    }
+
+    // If conditions are invalid, remove coupons price component.
+    if (!$valid_coupon) {
+      $price_components = $line_item_wrapper->commerce_total->data->value();
+      $base_price = 0;
+      foreach($price_components['components'] as $component) {
+
+        if ($component['name'] == 'base_price') {
+          $base_price = $component['price']['amount'];
+        }
+        $coupon_title = strstr($component['name'], 'commerce_coupon_');
+
+        if ($coupon_title && commerce_price_component_load($line_item_wrapper->commerce_unit_price->value(), $component['name'])) {
+          //$price_component_name = $coupon_wrapper->price_component_name->value();
+          $line_item_wrapper->commerce_total->data = commerce_price_component_delete($line_item_wrapper->commerce_total->value(), $component['name']);
+          $line_item_wrapper->commerce_unit_price->data = commerce_price_component_delete($line_item_wrapper->commerce_unit_price->value(), $component['name']);
+          $line_item_wrapper->commerce_total->amount = $base_price;
+          $line_item_wrapper->save();
+        }
+      }
+    } else {
+      $data = $line_item_wrapper->value()->data;
+      $data['valid'] = TRUE;
+      $line_item_wrapper->value()->data = $data;
+      $line_item_wrapper->save();
+    }
+  }
+  return $valid_coupon;
+}
+
+/**
+ * Implements hook_rules_condition_info().
+ */
+function api_tokens_rules_condition_info() {
+  $conditions = array();
+    $conditions['commerce_product_promotional_code_validation'] = array(
+      'label' => t('Line item: Promotional Code validation'),
+      'parameter' => array(
+        'commerce_line_item' => array(
+          'type' => 'commerce_line_item',
+          'label' => t('Line item'),
+          'description' => t('The line item.'),
+          'wrapped' => TRUE,
+        ),
+        'type' => array(
+          'type' => 'text',
+          'label' => t('Valid'),
+          'description' => t('(0: invalid, 1: valid)'),
+          'options list' => 'api_tokens_promotional_code_validation_options_list',
+        ),
+      ),
+      'module' => 'api_tokens',
+      'group' => t('Commerce Line Item'),
+      'callbacks' => array(
+        'execute' => 'api_tokens_promotional_code_validation_callback',
+      ),
+    );
+  return $conditions;
+}
+
+function api_tokens_promotional_code_validation_options_list() {
+  return array(0 => t('Invalid'), 1 => t('Valid'));
+}
+
+/**
+ * Build callback for commerce_product_has_type.
+ *
+ * @param EntityDrupalWrapper $wrapper
+ *   Wrapped entity type given by the rule.
+ * @param string $type
+ *   Product type returned by rule condition.
+ *
+ * @return bool
+ *   True if condition is valid. false otherwise.
+ */
+function api_tokens_promotional_code_validation_callback(EntityDrupalWrapper $wrapper, $type) {
+  // Only for Line items with Product reference field.
+  $order = commerce_order_load($wrapper->order_id->value());
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  return api_tokens_validate_line_item_coupons($order_wrapper, $wrapper);
+}

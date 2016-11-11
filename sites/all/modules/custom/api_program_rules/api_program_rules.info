@@ -1,0 +1,5 @@
+name = API Program Rules
+description = Rules applied to a program.
+package = API Custom
+version = VERSION
+core = 7.x

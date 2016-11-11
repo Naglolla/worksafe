@@ -1,0 +1,6 @@
+name = API Safety Keys
+description = API Safty Keys functionality.
+dependencies[] = api_moodle
+package = API Custom
+version = VERSION
+core = 7.x

@@ -1,0 +1,310 @@
+<?php
+
+/**
+ * @file Implements maps for JVector Maps.
+ *
+ */
+
+/**
+ * Implements hook_menu()
+ */
+function api_maps_menu() {
+  $items['api-map'] = array(
+    'title' => 'States',
+    'access callback' => TRUE,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_maps_page'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_js_alter.
+ */
+function api_maps_js_alter(&$javascript) {
+  //JVectorMap requires JQuery v1.5 or higher (.done).
+  $arg = arg();
+  // Just Update in our page. Otherwise we need to test all pages for new integration.
+  if ($arg[0] == 'api-map') {
+    unset($javascript['misc/jquery.js']);
+    $module_path = drupal_get_path('module', 'api_maps');
+    $javascript[$module_path . '/jquery/jquery.js'] = array(
+      'group' => '-100',
+      'weight' => '-19.998',
+      'version' => '1.5',
+      'every_page' => '1',
+      'type' => 'file',
+      'scope' => 'header',
+      'cache' => '1',
+      'defer' => '',
+      'preprocess' => '1',
+      'data' => $module_path . '/jquery/jquery.js',
+      'browsers' => array(),
+    );
+  }
+}
+
+/**
+ * Implements HOOK_block_info().
+ */
+function api_maps_block_info() {
+  $blocks['api_maps_us_block'] = array(
+    'info' => t('US Map'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/**
+ * Implements HOOK_block_view().
+ */
+function api_maps_block_view($delta = '') {
+  $block = array();
+  $block['subject'] = '';
+  $block['description'] = t('Display US Map');
+  $block['content'] = api_maps_page();
+  return $block;
+}
+
+/**
+ * Implements hook_views_api().
+ *
+ * Used for enabling using templates inside my module
+ */
+function api_maps_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'api_maps'),
+    'template path' => drupal_get_path('module', 'api_maps') . '/templates',
+  );
+}
+
+/**
+ * Implements hook_menu()
+ */
+function api_maps_page() {
+  $form = array();
+  $form['api-usa-jmap'] = array(
+    '#theme' => 'jvectormap',
+    '#attributes' => array(
+      'id' => 'api-usa-map',
+      'style' => 'width:95%; height:500px; margin:auto',
+    ),
+  );
+  $module_path = drupal_get_path('module', 'api_maps');
+  drupal_add_js($module_path . '/jvectormap/jquery-jvectormap.min.js', array('scope' => 'footer'));
+  drupal_add_js($module_path . '/jvectormap/jquery-jvectormap-us-aea.js', array('scope' => 'footer'));
+  drupal_add_css($module_path . '/jvectormap/jquery-jvectormap.css');
+  
+  drupal_add_css($module_path . '/css/api_maps.css');
+  drupal_add_js($module_path . '/js/api_maps.js', array('scope' => 'footer','group' => JS_THEME,'every_page' => TRUE,'weight' => -1));
+
+  // States List for mobile.
+  $states = api_maps_get_states_select_list_options();
+  if (!empty($states)) {
+    $form['states_list'] = array(
+      '#type' => 'select',
+      '#title' => t('States'),
+      '#options' => $states,
+    );
+  }
+  
+  $form['states_block'] = array(
+    '#type' => 'markup',
+    '#markup' => views_embed_view('api_maps_views', 'api_map_states_display'),
+  );
+  
+  return $form;
+}
+
+/**
+ * Function to fetch US States for Select List field.
+ */
+function api_maps_get_states_select_list_options() {
+  $cache = cache_get('api_maps_states_list');
+  if (isset($cache->data)) {
+    $states = $cache->data;
+  } else {
+    // Avoid EntityFieldQuery since it only returns the entities id's. 
+    // Use raw query instead of entity load to avoid loading full entities.
+    $result = db_query(
+        'SELECT id, field_title_value, field_map_state_id_value, field_map_state_alt_url_value FROM {eck_us_state} ' .
+        'JOIN {field_data_field_title} ON field_data_field_title.entity_id = eck_us_state.id ' . 
+        'JOIN {field_data_field_map_state_id} ON field_data_field_map_state_id.entity_id = eck_us_state.id ' . 
+        'LEFT JOIN {field_data_field_map_state_alt_url} ON field_data_field_map_state_alt_url.entity_id = eck_us_state.id ' . 
+        'WHERE eck_us_state.type = :id', array(':id' => 'us_state'))
+      ->fetchAll();
+    $states = array('null' => ' - Choose State - ');
+    foreach ($result as $row) {
+     $states[$row->field_map_state_id_value] = $row->field_title_value;
+    }
+    cache_set('api_maps_states_list', $states);
+  }
+  return $states;
+}
+
+/**
+ * Implements of hook_services_resources().
+ */
+function api_maps_services_resources() {
+  return array(
+    'api' => array(
+      'actions' => array(
+        'getMapInfo' => array(
+          'access callback' => 'api_maps_resource_retrieve_access',
+          'help' => 'Returns information to populate US Map.',
+          'callback' => 'api_maps_service_get_info',
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * getMapInfo Services Resources Access Callback
+ */
+function api_maps_resource_retrieve_access() {
+  // Access to US Map Info is to all users.
+  return TRUE;
+}
+
+/**
+ * getMapInfo Services Resources Callback
+ */
+function api_maps_service_get_info() {
+  global $base_url;
+  $response = array(
+    'states' => array(), 
+    'graph' => array()
+  );
+
+  // Load Map States.
+  $query = new EntityFieldQuery();
+  $query
+    ->entityCondition('entity_type', 'us_state', '=');
+  $result = $query->execute();
+  
+  $entities_id = array();
+  foreach($result['us_state'] as $record) {
+    $entities_id[] = $record->id;
+  }
+  $entities = entity_load('us_state', $entities_id);
+  foreach ($entities as $entity) {
+    if ($entity->type == 'us_state') {
+      $state_id = $entity->field_map_state_id[LANGUAGE_NONE][0]['safe_value'];
+      if (isset($entity->field_map_state_color[LANGUAGE_NONE][0]['rgb'])) {
+        $response['states'][$state_id]['color'] = $entity->field_map_state_color[LANGUAGE_NONE][0]['rgb'];
+      }
+      if (isset($entity->field_map_tip_information[LANGUAGE_NONE][0]['safe_value'])) {
+        $response['states'][$state_id]['tip_info'] = $entity->field_map_tip_information[LANGUAGE_NONE][0]['safe_value'];
+      }
+      if (isset($entity->field_map_state_alt_url[LANGUAGE_NONE][0]['safe_value'])) {
+        $alt_action = $entity->field_map_state_alt_url[LANGUAGE_NONE][0]['safe_value'];
+        if(url_is_external($alt_action)) {
+          $response['states'][$state_id]['alt_action'] = $alt_action;
+        } else {
+          $response['states'][$state_id]['alt_action'] = $base_url . '/' . $alt_action;
+        }
+      }
+    } elseif ($entity->type == 'us_map_graph') {
+      if ($entity->field_graph_display_on_graph[LANGUAGE_NONE][0]['value']) {
+        $rgb_id = $entity->field_graph_state_color[LANGUAGE_NONE][0]['rgb'];
+        $response['graph'][$rgb_id]['color'] = $rgb_id;
+        $response['graph'][$rgb_id]['label'] = $entity->field_graph_color_label[LANGUAGE_NONE][0]['safe_value'];
+      }
+    }
+  }
+  return $response;
+}
+
+/**
+ * Implements HOOK_form_ID_alter().
+ */
+function api_maps_form_eck__entity__delete_form_alter(&$form, $form_state, $form_id) {
+  // Warn users about deleting US States. Users are redirected to this entities when using the US Map.
+  $type = $form['entity']['#value']->type;
+  if ($type == 'us_state') {
+    drupal_set_message(t('US States are used to populate the US Map. Deleting US States may cause issues ("Page Not Found" pages).'), 'warning');
+  }
+}
+
+/**
+ * Implements HOOK_form_ID_alter().
+ */
+function api_maps_form_eck__entity__form_edit_us_state_us_state_alter(&$form, $form_state, $form_id) {
+  // Disable both fields. States cannot be modified or deleted.
+  $form['field_state_id']['#disabled'] = TRUE;
+  $form['field_map_state_id']['#disabled'] = TRUE;
+}
+
+/**
+ * Implements HOOK_form_ID_alter().
+ */
+function api_maps_form_eck__entity__form_add_us_state_us_state_alter(&$form, $form_state, $form_id) {
+  // Don't allow user to create entities with US States that already exist.
+  $form['#validate'][] = 'api_maps_check_existing_ids';
+}
+
+/**
+ * Implements HOOK_form_ID_alter().
+ */
+function api_maps_form_eck__entity__form_add_us_state_us_map_graph_alter(&$form, $form_state, $form_id) {
+  // Don't allow user to create entities with Graph Colors that already exist.
+  $form['#validate'][] = 'api_maps_check_existing_ids';
+}
+
+/**
+ * Validate Function for US State and US Map Graph Entities.
+ */
+function api_maps_check_existing_ids($form, $form_state, $form_id) {
+  $values = $form_state['values'];
+  $type = $values['entity']->type;
+  
+  // Don't allow user to create entities with US States or Colors that already exist.
+  if ($type == 'us_state') {
+    $state_id = $values['field_state_id']['und'][0]['value'];
+    $map_state_id = $values['field_map_state_id']['und'][0]['value'];
+
+    // Check if State ID already exist.
+    $query = new EntityFieldQuery();
+    $query
+      ->entityCondition('entity_type', 'us_state', '=')   
+      ->fieldCondition('field_state_id', 'value', $state_id);
+    $result = $query->execute();
+    if ($result) {
+      form_set_error('field_state_id', t('State already exist. Can not create states that already exist.'));
+    }
+    
+    // Check if Map State ID already exist.
+    $query = new EntityFieldQuery();
+    $query
+      ->entityCondition('entity_type', 'us_state', '=')   
+      ->fieldCondition('field_map_state_id', 'value', $map_state_id);
+    $result = $query->execute();
+    if ($result) {
+      form_set_error('field_map_state_id', t('State already exist. Can not create states that already exist.'));
+    }
+  } elseif ($type == 'us_map_graph') {
+    $graph_color = $values['field_graph_state_color']['und'][0]['rgb'];
+    // Check if Graph Color already exist.
+    $query = new EntityFieldQuery();
+    $query
+      ->entityCondition('entity_type', 'us_state', '=')
+      ->fieldCondition('field_graph_state_color', 'rgb', $graph_color);
+    $result = $query->execute();
+    if ($result) {
+      form_set_error('field_graph_state_color', t('Graph Color already exist. Can not create graph colors that already exist.'));
+    }
+  }
+}
+
+/**
+ * Implements hook_entity_view().
+ */
+function api_maps_entity_view($entity, $type, $view_mode, $langcode) {
+  // Set States View Header Title.
+  if ($entity->type == 'us_state' && isset($entity->field_title[LANGUAGE_NONE][0]['safe_value'])) {
+    drupal_set_title($entity->field_title[LANGUAGE_NONE][0]['safe_value']);
+  }
+}

@@ -1,0 +1,86 @@
+body.not-logged-in.page-programs .section-content .block-system-main{
+  width: 100%;
+  float: none;
+}
+body.page-programs .section-content {
+  #region-content .region-inner {
+    width: 90%;
+    margin:auto;
+    @media @menu-size {
+      width: 100%;
+    }
+  }
+  /* Programs info section */
+  .block-system-main {
+    width: 70%;
+    float: left;
+    .view-content {
+      .views-row {
+        color: @main-color-dark;
+        border: 2px solid @main-color-dark;
+        border-top: 10px solid @main-color-orange;
+        margin-bottom: 35px;
+        
+        .block-1 {
+          padding: 50px 50px 30px 50px;
+          .program-long-description {
+            display: none;
+          }
+          .views-field-nothing, .views-field-state-info {
+            display: inline-block;
+            margin-top: 30px;
+            a {
+              .button;
+              background-color: @main-color-blue;
+              color: @main-color-light;
+              white-space: nowrap;
+              &:hover {
+                color: @main-color-light;
+                background-color: darken(@main-color-blue, 10%)  !important;
+              }
+              @media @small-size {
+                width: 100%;
+                padding-left: 0;
+                padding-right: 0;
+              }
+            }
+            @media @small-size {
+              display: block;
+            }
+          }
+          @media @small-size {
+            padding: 20px;
+          }
+        }
+        .block-2 {
+          background: @main-color-light;
+          padding: 10px 50px;
+          margin: 0 auto;
+          overflow: hidden;
+          > div {
+            margin: 20px 0;
+            @media @small-size {
+              margin: 10px 0;
+            }
+          }
+          @media @small-size {
+            padding: 20px;
+          }
+        }
+        .field-type-text-with-summary {
+          margin: 0;
+          a:hover {
+            color: @main-color-orange;
+          }
+        }
+      }
+      @media @small-size {
+        text-align: center;
+      }
+    }
+    @media @small-size {
+      width: 100%;
+      float: none;
+    }
+  }
+}

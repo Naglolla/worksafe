@@ -1,0 +1,4 @@
+name = API FAQ & Contact
+description = Help & FAQ page with Contact Form
+package = API Custom
+core = 7.x

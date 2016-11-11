@@ -1,0 +1,545 @@
+<?php
+
+/**
+ * @file API Commerce Cart functionality
+ *
+ */
+
+function api_commerce_menu(){
+  $items = array();
+
+  $items['product/cart'] = array(
+    'title' => 'My Cart',
+    'page callback' => 'commerce_cart_menu_item_redirect',
+    'access arguments' => array('access content'),
+    'menu_name' => 'secondary-navigation',
+    'weight' => '-48',
+  );
+
+  $items['order/%/refund'] = array(
+    'title' => 'Refund Order',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_commerce_refund_confirm', 1),
+    'access callback' => 'api_commerce_order_refund_access',
+    'file' => 'api_commerce.refund.inc',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );
+
+  return $items;
+}
+
+function api_commerce_menu_alter(&$items) {
+  $items['cart']['title'] = 'My Cart';
+  //make user menu appear in order detail page
+  $items['user/%user/orders/%commerce_order']['type'] = MENU_LOCAL_TASK;
+}
+
+/**
+ * Implements hook_init().
+ */
+function api_commerce_init() {
+  if (arg(0) == 'user' && arg(2) == 'orders' && is_numeric(arg(1)) && is_numeric(arg(3))) {
+    drupal_set_title(t('My Orders'));
+  }
+}
+/**
+ * Implements HOOK_theme().
+ */
+function api_commerce_theme($existing, $type, $theme, $path) {
+    return array(
+    	'api_commerce_cart_empty' => array(
+    		'path' => $path . '/templates',
+    		'template' => 'api-commerce-cart-empty',
+    		'variables' => array(
+    			'message' => NULL,
+    			'link' => NULL,
+    			),
+    		),
+    	);
+}
+
+function api_commerce_theme_registry_alter(&$theme_registry) {
+  $theme_registry['commerce_cart_empty_page']['function'] = 'api_commerce_theme_cart_empty_page';
+}
+
+/**
+ * Implements HOOK_custom_theme().
+ */
+function api_commerce_custom_theme() {
+  global $user;
+  // Use admin theme in node pages for admin users.
+  if (in_array(ADMIN_ROLE, $user->roles) && arg(0) == 'order') {
+    $admin_theme = variable_get('admin_theme', 'commerce_kickstart_admin');
+    return $admin_theme;
+  }
+}
+
+function api_commerce_theme_cart_empty_page() {
+  $title = t('Your cart is empty');
+  $link = l(t('Programs'), 'programs');
+  return theme('api_commerce_cart_empty', array('title' => $title, 'link' => $link));;
+}
+
+function api_commerce_theme_commerce_checkout_router($order, $checkout_page) {
+  // Get the id of the first and last checkout page
+  $checkout_pages = commerce_checkout_pages();
+  $first_checkout_page = key($checkout_pages);
+  end($checkout_pages);
+  $last_checkout_page = key($checkout_pages);
+  // Check if the user's shopping cart order exists with something in the cart
+  if (commerce_cart_order_load() && commerce_checkout_redirect_items_in_cart()) {
+    if (($checkout_page['page_id'] == $first_checkout_page)) {
+      if (user_is_anonymous() && empty($_SESSION['commerce_checkout_redirect_bypass'])) {
+        $_SESSION['commerce_checkout_redirect_anonymous'] = TRUE;
+        $commerce_checkout_redirect_message = variable_get('commerce_checkout_redirect_message', t('You need to be logged in to be able to checkout.'));
+        if (!empty($commerce_checkout_redirect_message)) {
+          drupal_set_message($commerce_checkout_redirect_message);
+        }
+        $redirect_path = variable_get('commerce_checkout_redirect_path', 'user/login');
+        if($redirect_path == '') {
+          $redirect_path = 'user/login';
+        }
+        return drupal_goto($redirect_path, array('query' => array('destination' => 'checkout')));
+      }
+    }
+  }
+  elseif ($checkout_page['page_id'] == $last_checkout_page) {
+    unset($_SESSION['commerce_checkout_redirect_bypass']);
+  }
+}
+
+function api_commerce_entity_view_alter(&$build, $type) {
+  switch ($type) {
+    case 'commerce_order':
+        if (isset($_GET['print']) && $_GET['print'] == '1') {
+          drupal_add_js('window.print();', 'inline');
+        }
+        $order = $build['#entity'];
+        $build['commerce_order_total']['#formatter'] = 'commerce_price_api_tokens_formatted_components';
+
+        // Prepare a display settings array.
+        $display = array(
+          'label' => 'hidden',
+          'type' => 'commerce_price_api_tokens_formatted_components',
+          'settings' => array(
+            'calculation' => FALSE,
+          ),
+        );
+
+        // Render the order's order total field with the current display.
+        $field = field_view_field('commerce_order', $order, 'commerce_order_total', $display);
+
+        if (!empty($field[0]['#markup'])) {
+          $build['commerce_order_total'][0] = $field;
+        }
+
+        $order_status = commerce_order_status_load($order->status);
+        $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+        $payment_methods = api_tokens_get_order_payment_methods($order_wrapper);
+        $build['details'] = array(
+          '#type' => 'fieldset',
+          '#title' => t('Order details'),
+          '#weight' => -100,
+        );
+
+        $build['details']['markup'] = array(
+          '#prefix' => '<div id="order-header">',
+          '#suffix' => '</div>'. sprintf('<span class="button primary print-button" onclick="window.print();">%s</span>', t('Print')),
+          array('#markup' => sprintf('<div><label>%s</label><span class="data">%s</span></div>', t('Order number: '), $order->order_number)),
+          array('#markup' => sprintf('<div><label>%s</label><span class="data">%s</span></div>', t('Payment Status: '), t($order_status['title']))),
+          array('#markup' => sprintf('<div><label>%s</label><span class="data">%s</span></div>', t('Date: '), date('m/d/Y', $order->changed))),
+          array('#markup' => sprintf('<div><label>%s</label><span class="data">%s</span></div>', t('Payment type: '), implode(', ', $payment_methods))),
+          );
+        
+        if(($referer_uri = $_SERVER["HTTP_REFERER"]) && (preg_match("/review/", $referer_uri))) {
+          global $user;
+          $continue_link = l(t('Continue'), 'user/'.$user->uid.'/edit', array('attributes' => array('class'=> 'button primary continue')));
+          $build['action'] = array(
+            '#prefix' =>$continue_link
+          );
+        }
+      break;
+  }
+}
+
+function api_commerce_preprocess_entity(&$vars) {
+  if ($vars['entity_type'] == 'commerce_order') {
+    drupal_add_css(drupal_get_path('module', 'api_commerce') . '/order_print.css', array('media' => 'print'));
+  }
+}
+
+/**
+ * Move feed link to the top of the user orders view.
+ * Add print link, pager additional text, and print css file.
+ */
+function api_commerce_preprocess_views_view(&$vars) {
+
+  if($vars['name'] == 'api_commerce_backoffice_user_orders') {
+    drupal_add_css(drupal_get_path('module', 'api_commerce') . '/order_print.css', array('media' => 'print'));
+
+    $uid = $vars['view']->args[0];
+    $feed_link = l(t('Export the Full Report'), 'user/'.$uid.'/orders/csv', array('attributes' => array('class'=> 'button primary export-csv-button')));
+    $print_link = '<span class="button primary print-button" onclick="window.print();">' . t('Print') . '</span>';
+    $vars['title_suffix'] = '<div class="top-buttons">'.$feed_link . $print_link.'</div>';
+
+    if (!empty($vars['pager'])) {
+      $items = $vars['view']->query->pager->options['items_per_page'];
+      $total = $vars['view']->total_rows;
+      $pager_text = '<div id="pager-text">' . t('Displaying @items of @total Orders', array('@items' => $items, '@total' => $total)) . '</div>';
+      $vars['pager'] =  '<div>' .$vars['pager'] . $pager_text . '</div>';
+    }
+
+    unset($vars['feed_icon']);
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ *
+ * Used for enabling using templates inside my module
+ */
+function api_commerce_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'api_commerce'),
+    'template path' => drupal_get_path('module', 'api_commerce') . '/templates',
+  );
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function api_commerce_form_alter(&$form, &$form_state, $form_id) {
+  if (strpos($form_id, 'views_form_commerce_cart_form_') === 0) {
+    // Change checkout submit button value.
+    $form['actions']['checkout']['#value'] = t('Proceed to Checkout');
+    // Hide update cart option.
+    $form['actions']['submit']['#access'] = FALSE;
+  }
+}
+
+function api_commerce_commerce_price_formatted_components_alter(&$components, $price, $entity) {
+  if ($entity->type == 'commerce_order') {
+    $components['commerce_price_formatted_amount']['title'] = t('Total');
+  }
+}
+
+/**
+ * Implements hook_views_default_views_alter().
+ */
+function api_commerce_views_default_views_alter(&$views) {
+  if (isset($views['commerce_cart_form'])) {
+  $view = &$views['commerce_cart_form'];
+
+  $view->name = 'commerce_cart_form';
+  $view->description = 'Display a shopping cart update form.';
+  $view->tag = 'commerce';
+  $view->base_table = 'commerce_order';
+  $view->human_name = 'Shopping cart form';
+  $view->core = 0;
+  $view->api_version = '3.0';
+  $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
+
+  /* Display: Defaults */
+  $handler = $view->new_display('default', 'Defaults', 'default');
+  $handler->display->display_options['title'] = 'Shopping cart';
+  $handler->display->display_options['use_more_always'] = FALSE;
+  $handler->display->display_options['access']['type'] = 'none';
+  $handler->display->display_options['cache']['type'] = 'none';
+  $handler->display->display_options['query']['type'] = 'views_query';
+  $handler->display->display_options['query']['options']['query_comment'] = FALSE;
+  $handler->display->display_options['exposed_form']['type'] = 'basic';
+  $handler->display->display_options['pager']['type'] = 'none';
+  $handler->display->display_options['style_plugin'] = 'table';
+  $handler->display->display_options['style_options']['columns'] = array(
+    'commerce_display_path' => 'commerce_display_path',
+    'line_item_title' => 'line_item_title',
+    'commerce_unit_price' => 'commerce_unit_price',
+    'edit_quantity' => 'edit_quantity',
+    'edit_delete' => 'edit_delete',
+    'commerce_total' => 'commerce_total',
+  );
+  $handler->display->display_options['style_options']['default'] = '-1';
+  $handler->display->display_options['style_options']['info'] = array(
+    'commerce_display_path' => array(
+      'sortable' => 0,
+      'default_sort_order' => 'asc',
+      'align' => '',
+      'separator' => '',
+    ),
+    'line_item_title' => array(
+      'align' => '',
+      'separator' => '',
+    ),
+    'commerce_unit_price' => array(
+      'sortable' => 0,
+      'default_sort_order' => 'asc',
+      'align' => '',
+      'separator' => '',
+    ),
+    'edit_quantity' => array(
+      'align' => '',
+      'separator' => '',
+    ),
+    'edit_delete' => array(
+      'align' => '',
+      'separator' => '',
+    ),
+    'commerce_total' => array(
+      'sortable' => 0,
+      'default_sort_order' => 'asc',
+      'align' => '',
+      'separator' => '',
+    ),
+  );
+  /* Footer: Commerce Order: Order total */
+  $handler->display->display_options['footer']['order_total']['id'] = 'order_total';
+  $handler->display->display_options['footer']['order_total']['table'] = 'commerce_order';
+  $handler->display->display_options['footer']['order_total']['field'] = 'order_total';
+  /* Relationship: Commerce Order: Referenced line items */
+  $handler->display->display_options['relationships']['commerce_line_items_line_item_id']['id'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['relationships']['commerce_line_items_line_item_id']['table'] = 'field_data_commerce_line_items';
+  $handler->display->display_options['relationships']['commerce_line_items_line_item_id']['field'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['relationships']['commerce_line_items_line_item_id']['required'] = TRUE;
+  /* Field: Commerce Line item: Display path */
+  $handler->display->display_options['fields']['commerce_display_path']['id'] = 'commerce_display_path';
+  $handler->display->display_options['fields']['commerce_display_path']['table'] = 'field_data_commerce_display_path';
+  $handler->display->display_options['fields']['commerce_display_path']['field'] = 'commerce_display_path';
+  $handler->display->display_options['fields']['commerce_display_path']['relationship'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['fields']['commerce_display_path']['label'] = '';
+  $handler->display->display_options['fields']['commerce_display_path']['exclude'] = TRUE;
+  /* Field: Commerce Line Item: Title */
+  $handler->display->display_options['fields']['line_item_title']['id'] = 'line_item_title';
+  $handler->display->display_options['fields']['line_item_title']['table'] = 'commerce_line_item';
+  $handler->display->display_options['fields']['line_item_title']['field'] = 'line_item_title';
+  $handler->display->display_options['fields']['line_item_title']['relationship'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['fields']['line_item_title']['label'] = '';
+  $handler->display->display_options['fields']['line_item_title']['exclude'] = TRUE;
+  $handler->display->display_options['fields']['line_item_title']['alter']['alter_text'] = TRUE;
+  $handler->display->display_options['fields']['line_item_title']['alter']['text'] = 'View product';
+  $handler->display->display_options['fields']['line_item_title']['alter']['make_link'] = TRUE;
+  $handler->display->display_options['fields']['line_item_title']['alter']['path'] = '[commerce_display_path]';
+  $handler->display->display_options['fields']['line_item_title']['element_label_colon'] = FALSE;
+  /* Field: Commerce Line item: Product */
+  $handler->display->display_options['fields']['commerce_product']['id'] = 'commerce_product';
+  $handler->display->display_options['fields']['commerce_product']['table'] = 'field_data_commerce_product';
+  $handler->display->display_options['fields']['commerce_product']['field'] = 'commerce_product';
+  $handler->display->display_options['fields']['commerce_product']['relationship'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['fields']['commerce_product']['label'] = '';
+  $handler->display->display_options['fields']['commerce_product']['exclude'] = TRUE;
+  $handler->display->display_options['fields']['commerce_product']['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields']['commerce_product']['type'] = 'commerce_product_reference_rendered_product';
+  $handler->display->display_options['fields']['commerce_product']['settings'] = array(
+    'view_mode' => 'product_in_cart',
+    'page' => 1,
+  );
+  /* Field: Global: Custom text */
+  $handler->display->display_options['fields']['nothing']['id'] = 'nothing';
+  $handler->display->display_options['fields']['nothing']['table'] = 'views';
+  $handler->display->display_options['fields']['nothing']['field'] = 'nothing';
+  $handler->display->display_options['fields']['nothing']['label'] = 'Product Name';
+  $handler->display->display_options['fields']['nothing']['alter']['text'] = '[commerce_product]
+    [line_item_title]';
+  $handler->display->display_options['fields']['nothing']['element_label_colon'] = FALSE;
+  /* Field: Global: Custom text */
+  $handler->display->display_options['fields']['nothing_1']['id'] = 'nothing_1';
+  $handler->display->display_options['fields']['nothing_1']['table'] = 'views';
+  $handler->display->display_options['fields']['nothing_1']['field'] = 'nothing';
+  $handler->display->display_options['fields']['nothing_1']['label'] = 'Type';
+  /* Field: Commerce Line item: Unit price */
+  $handler->display->display_options['fields']['commerce_unit_price']['id'] = 'commerce_unit_price';
+  $handler->display->display_options['fields']['commerce_unit_price']['table'] = 'field_data_commerce_unit_price';
+  $handler->display->display_options['fields']['commerce_unit_price']['field'] = 'commerce_unit_price';
+  $handler->display->display_options['fields']['commerce_unit_price']['relationship'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['fields']['commerce_unit_price']['label'] = 'Cost';
+  $handler->display->display_options['fields']['commerce_unit_price']['element_class'] = 'price';
+  $handler->display->display_options['fields']['commerce_unit_price']['click_sort_column'] = 'amount';
+  $handler->display->display_options['fields']['commerce_unit_price']['settings'] = array(
+    'calculation' => FALSE,
+  );
+  /* Field: Commerce Line Item: Quantity text field */
+  $handler->display->display_options['fields']['edit_quantity']['id'] = 'edit_quantity';
+  $handler->display->display_options['fields']['edit_quantity']['table'] = 'commerce_line_item';
+  $handler->display->display_options['fields']['edit_quantity']['field'] = 'edit_quantity';
+  $handler->display->display_options['fields']['edit_quantity']['relationship'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['fields']['edit_quantity']['label'] = 'Quantity';
+  $handler->display->display_options['fields']['edit_quantity']['exclude'] = TRUE;
+  $handler->display->display_options['fields']['edit_quantity']['alter']['word_boundary'] = FALSE;
+  $handler->display->display_options['fields']['edit_quantity']['alter']['ellipsis'] = FALSE;
+  $handler->display->display_options['fields']['edit_quantity']['element_label_colon'] = FALSE;
+  /* Field: Commerce Line Item: Delete button */
+  $handler->display->display_options['fields']['edit_delete']['id'] = 'edit_delete';
+  $handler->display->display_options['fields']['edit_delete']['table'] = 'commerce_line_item';
+  $handler->display->display_options['fields']['edit_delete']['field'] = 'edit_delete';
+  $handler->display->display_options['fields']['edit_delete']['relationship'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['fields']['edit_delete']['label'] = 'Options';
+  /* Field: Commerce Line item: Total */
+  $handler->display->display_options['fields']['commerce_total']['id'] = 'commerce_total';
+  $handler->display->display_options['fields']['commerce_total']['table'] = 'field_data_commerce_total';
+  $handler->display->display_options['fields']['commerce_total']['field'] = 'commerce_total';
+  $handler->display->display_options['fields']['commerce_total']['relationship'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['fields']['commerce_total']['exclude'] = TRUE;
+  $handler->display->display_options['fields']['commerce_total']['element_class'] = 'price';
+  $handler->display->display_options['fields']['commerce_total']['click_sort_column'] = 'amount';
+  $handler->display->display_options['fields']['commerce_total']['settings'] = array(
+    'calculation' => FALSE,
+  );
+  /* Sort criterion: Commerce Line Item: Line item ID */
+  $handler->display->display_options['sorts']['line_item_id']['id'] = 'line_item_id';
+  $handler->display->display_options['sorts']['line_item_id']['table'] = 'commerce_line_item';
+  $handler->display->display_options['sorts']['line_item_id']['field'] = 'line_item_id';
+  $handler->display->display_options['sorts']['line_item_id']['relationship'] = 'commerce_line_items_line_item_id';
+  /* Contextual filter: Commerce Order: Order ID */
+  $handler->display->display_options['arguments']['order_id']['id'] = 'order_id';
+  $handler->display->display_options['arguments']['order_id']['table'] = 'commerce_order';
+  $handler->display->display_options['arguments']['order_id']['field'] = 'order_id';
+  $handler->display->display_options['arguments']['order_id']['default_action'] = 'empty';
+  $handler->display->display_options['arguments']['order_id']['default_argument_type'] = 'fixed';
+  $handler->display->display_options['arguments']['order_id']['summary']['number_of_records'] = '0';
+  $handler->display->display_options['arguments']['order_id']['summary']['format'] = 'default_summary';
+  $handler->display->display_options['arguments']['order_id']['summary_options']['items_per_page'] = '25';
+  /* Filter criterion: Commerce Line Item: Line item is of a product line item type */
+  $handler->display->display_options['filters']['product_line_item_type']['id'] = 'product_line_item_type';
+  $handler->display->display_options['filters']['product_line_item_type']['table'] = 'commerce_line_item';
+  $handler->display->display_options['filters']['product_line_item_type']['field'] = 'product_line_item_type';
+  $handler->display->display_options['filters']['product_line_item_type']['relationship'] = 'commerce_line_items_line_item_id';
+  $handler->display->display_options['filters']['product_line_item_type']['value'] = '1';
+  $handler->display->display_options['filters']['product_line_item_type']['group'] = 0;
+  }
+}
+
+/**
+ * Payment pane: form callback.
+ */
+function api_commerce_form_commerce_checkout_form_checkout_alter(&$form, &$form_state) {
+
+  $form['commerce_coupon']['#title'] = t('Promotional Code');
+  $form['commerce_coupon']['coupon_code']['#title'] = t('Code');
+  $form['commerce_coupon']['coupon_code']['#description'] = t('Enter here your promotional code.');
+  if (variable_get('commerce_coupon_checkout_enable_add_button', TRUE)) {
+    $form['commerce_coupon']['coupon_add']['#value'] = t('Apply');
+    //unset($form['commerce_coupon']['coupon_add']['#ajax']);
+    //$form['commerce_coupon']['coupon_add']['#attributes']['class'][] = 'ajax-processed';
+  }
+
+  // Hide Coupon form if one is already applied
+  $components = $form_state['order']->commerce_order_total[LANGUAGE_NONE][0]['data']['components'];
+  // Load order with updated info.
+  $coupon_applied = FALSE;
+  foreach ($components as $component) {
+    if (strpos($component['name'],'commerce_coupon') !== FALSE){
+      $coupon_applied = TRUE;
+    }
+  }
+  if ($coupon_applied){
+    $form['commerce_coupon']['coupon_code']['#access'] = FALSE;
+    $form['commerce_coupon']['coupon_add']['#access'] = FALSE;
+  }
+
+  $form['customer_profile_billing']['addressbook']["#empty_option"] = t('Custom address');
+}
+
+function api_commerce_form_views_form_commerce_cart_form_default_alter(&$form, &$form_state) {
+  $form['#suffix'] .= '<div class="cart-secure-message">' . t('Your payment is secure.') . '</div>';
+}
+
+/**
+ * Implements hook_default_message_type_alter().
+ */
+function api_commerce_default_message_type_alter(&$items) {
+  if (isset($items['commerce_order_order_confirmation'])) {
+    $items['commerce_order_order_confirmation']->purge = array(
+      'override' => 1,
+      'enabled' => 1,
+      'quota' => '100',
+      'days' => '30',
+    );
+    // Alter order notification email.
+    $items['commerce_order_order_confirmation']->message_text['und'] = array(
+      array(
+        'value' => 'API WorkSafe - Order [message:message-commerce-order:order-number]',
+        'format' => NULL,
+        'safe_value' => 'API WorkSafe - Order [message:message-commerce-order:order-number]'
+      ),
+      array(
+        'value' => str_replace(array('\u0027', '\u003E', '\u003C', '\/'), array('"', '>', '<', '/'), "\u003Cdiv class=\u0027message-wrapper\u0027\u003E\u003Cdiv class=\u0027header\u0027\u003E\u003Cdiv class=\u0027thank-you\u0027\u003E&nbsp;\u003C\/div\u003E\u003Cdiv class=\u0027thank-you\u0027\u003ETHANK YOU\u003C\/div\u003E\u003C\/div\u003E\u003Cdiv class=\u0027body\u0027\u003E\u003Cdiv class=\u0027order-summary-wrapper\u0027\u003E\u003Cp\u003EDate: [message:message-commerce-order:changed:api_m_d_y]\u003C\/p\u003E\u003Cp\u003E!order-summary\u003C\/p\u003E\u003C\/div\u003E\u003Cp\u003E-- API WorkSafe team.\u003C\/p\u003E\u003C\/div\u003E\u003C\/div\u003E"),
+        'format'  => 'full_html',
+        'safe_value' => str_replace(array('\u0027', '\u003E', '\u003C', '\/'), array('"', '>', '<', '/'), "\u003Cdiv class=\u0027message-wrapper\u0027\u003E\u003Cdiv class=\u0027header\u0027\u003E\u003Cdiv class=\u0027thank-you\u0027\u003E&nbsp;\u003C\/div\u003E\u003Cdiv class=\u0027thank-you\u0027\u003ETHANK YOU\u003C\/div\u003E\u003C\/div\u003E\u003Cdiv class=\u0027body\u0027\u003E\u003Cdiv class=\u0027order-summary-wrapper\u0027\u003E\u003Cp\u003EDate: [message:message-commerce-order:changed:api_m_d_y]\u003C\/p\u003E\u003Cp\u003E!order-summary\u003C\/p\u003E\u003C\/div\u003E\u003Cp\u003E-- API WorkSafe team.\u003C\/p\u003E\u003C\/div\u003E\u003C\/div\u003E"),
+      ),
+    );
+  }
+}
+
+/**
+ * Themes the optional checkout review page data.
+ */
+function api_commerce_preprocess_commerce_checkout_review(&$variables) {
+  // Alter pane displays.
+  foreach ($variables['form']['#data'] as $pane_id => &$data) {
+    if ($pane_id == 'account' || $pane_id == 'customer_profile_billing') {
+      $data['data'] = '<div class="' . str_replace('_', '-', $pane_id) . '">' . $data['data'] . '</div>';
+    }
+  }
+}
+
+/**
+ * Access Callback for order/%/refund menu.
+ */
+function api_commerce_order_refund_access(){
+  global $user;
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles) || in_array(ADMIN_ROLE, $user->roles)) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Implements hook_entity_load().
+ */
+function api_commerce_entity_load($entities, $type) {
+  // If Paypal credentials are defined somewhere, let's use them.
+  if ($type == 'rules_config') {
+    foreach ($entities as $entity) {
+      if (method_exists($entity, 'actions')) {
+        foreach ($entity->actions() as $action) {
+          if ($action instanceof RulesAction && $action->getElementName() == 'commerce_payment_enable_paypal_wpp') {
+            if (is_string($action->settings['payment_method'])) {
+              $action->settings['payment_method'] = array();
+              $action->settings['payment_method']['method_id'] = 'paypal_wpp';
+              $settings = commerce_paypal_wpp_default_settings();
+              $settings['api_username'] = variable_get('paypal_api_username', '');
+              $settings['api_password'] = variable_get('paypal_api_password', '');
+              $settings['api_signature'] = variable_get('paypal_api_signature', '');
+              $settings['server'] = variable_get('paypal_server', 'sandbox');
+              unset($settings['card_types']['amex']);
+              unset($settings['card_types']['discover']);
+              $action->settings['payment_method']['settings'] = $settings;
+            }
+            $action->processSettings(TRUE);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * hook_form_FORM_ID_alter():
+ */
+function api_commerce_form_commerce_checkout_form_review_alter(&$form, &$form_state) {
+  $form['commerce_payment']['payment_details']['credit_card']['number']['#title'] = t('Credit Card Number');
+  $form['commerce_payment']['payment_details']['credit_card']['exp_month']['#title'] = t('Card Expiration Date');
+
+  $csc_link = l('?', '', array('attributes' => array('id' => 'tooltip-link', 'class' => 'tooltip-link'), 'fragment' => 'tooltip', 'external' => TRUE));
+  $card_img = drupal_get_path('module', 'api_commerce') . '/images/cardcsc.png';
+  $csc_tooltip = '<div id="csc-tooltip" class="csc-tooltip"><img src="/'. $card_img .'" /></div>';
+  $form['commerce_payment']['payment_details']['credit_card']['code']['#title'] = t('CSC') . ' ' . $csc_link;
+  $form['commerce_payment']['payment_details']['credit_card']['code']['#suffix'] = $csc_tooltip;
+  $form['commerce_payment']['payment_details']['credit_card']['owner']['#title'] = t('Name on Card');
+  $form['commerce_payment']['payment_details']['credit_card']['owner']['#weight'] = -10;
+  $form['#attached']['js'][] = array(
+    'data' => drupal_get_path('module', 'api_commerce') . '/js/api_commerce_tooltip.js',
+    'type' => 'file',
+  );
+}

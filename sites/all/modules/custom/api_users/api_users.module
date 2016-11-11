@@ -1,0 +1,1792 @@
+<?php
+/**
+ * @file
+ * Provides custom functionality for API Users.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function api_users_menu() {
+  $items['admin/people/api/company/api-users'] = array(
+    'title' => 'Company Admin',
+    'access callback' => 'api_users_company_users_list_access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_users_company_users_list', 5, 6, 7, 8, 9, 10, 11, 12),
+    'file' => 'api_users.pages.inc',
+  );
+  return $items;
+}
+
+/**
+ * Access Callback for admin/people/api/company/api-users menu.
+ */
+function api_users_company_users_list_access() {
+  global $user;
+  // Only Company Admin can access the company users list.
+  if(in_array('company admin', $user->roles)) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Implements hook_form_alter.
+ */
+function api_users_form_alter(&$form, &$form_state, $form_id) {
+  global $theme;
+  if ($theme == 'commerce_kickstart_admin') {
+    switch($form_id) {
+      case 'user_register_form':
+      case 'user_profile_form':
+        // Add proper labels for each core field (not configurable from backend).
+        $form['account']['mail']['#title'] = t('E-mail Address');
+        $form['mimemail']['#title'] = t('Email Settings');
+        $form['locale']['#title'] = t('Language Settings');
+        $form['#groups']['group_mailing_preferences']->label = t('Mailing Preferences');
+
+        // CSS for users admin forms.
+        $form['#attached']['css'][] = drupal_get_path('module', 'api_users') . '/css/api_users.css';
+        break;
+    }
+    $arg = arg();
+    if ($arg[0] == 'admin' && isset($arg[1]) && $arg[1] == 'people') {
+      // CSS for users admin forms.
+      $form['#attached']['css'][] = drupal_get_path('module', 'api_users') . '/css/api_users.css';
+    }
+  }
+}
+
+/**
+ * Implemets HOOK_form_FORM_ID_alter.
+ */
+function api_users_form_user_register_form_alter(&$form, &$form_state, $form_id) {
+  global $user;
+	$form['#attached']['js'] = array(
+	  drupal_get_path('module', 'api_users') . '/js/api_users.js' => array(
+	  'type' => 'file',
+	  ),
+	);
+
+  $form['#prefix'] .= '<h1 class="center">' . t('Register') . '</h1>';
+  $form['company-select']['#title'] = "";
+
+  // Add company's and facility's fields to registration form.
+  // @todo find a better way to do this using HOOK_form_alter.
+  _api_users_form_company_fields($form);
+
+  $form['account']['user-show-password'] = array(
+    '#title' => t('Show password'),
+    '#type' => 'checkbox',
+  );
+
+  // change email description
+  $form['account']['mail']["#description"] = t('A valid and unique email address is required.');
+
+  $form['#group_children']['user-show-password'] = 'group_account_info';
+  if(!user_is_logged_in()) {
+    $form['actions']['submit']['#value'] = t('Create Account');
+  }
+  $form['#after_build'][] = 'api_users_form_register_form_after_build';
+
+  $form['field_first_name']["und"][0]['value']["#maxlength"] = 30;
+  $form['field_middle_name']["und"][0]['value']["#maxlength"] = 30;
+  $form['field_last_name']["und"][0]['value']["#maxlength"] = 30;
+  // Add link to terms and conditions.
+  $form['field_accept_terms_and_condition'][LANGUAGE_NONE]['#title'] = l($form['field_accept_terms_and_condition'][LANGUAGE_NONE]['#title'], 'http://www.americanpetroleuminstitute.com/globalitems/globalfooterpages/terms-and-conditions', array('attributes' => array('target' => '_blank')));
+
+  if (in_array('company admin', $user->roles)) {
+    // Remove title. "Register" is already set manually in "api_users_form_user_register_form_alter"
+    drupal_set_title(t(''));
+  }
+}
+
+/**
+ * User registration form after build callback.
+ */
+function api_users_form_register_form_after_build($form, &$form_state) {
+  $form['actions']['submit']['#suffix'] = '<div class="back-to-login clearfix">' . l(t('Cancel'), 'user/login', array('attributes' => array('class' => array('login-account'), 'title' => t('Cancel')))) . '</div>';
+  $form['actions']['submit']['#suffix'] .= '</div>';
+  return $form;
+}
+
+/*
+ * Form validation.
+ */
+function api_users_form_user_register_form_alter_validate(&$form, &$form_state) {
+  $errors = FALSE;
+  $company = NULL;
+  $branch = NULL;
+  // Check previous validation errors.
+  $previous_errors = form_get_errors();
+  if (!empty($previous_errors)) {
+    $errors = TRUE;
+  }
+  // Validate requiered fields.
+  $values = &$form_state['values'];
+
+  // Company's required fields
+  $company_fields = array('company-name', 'company-address-1', 'company-country', 'company-us-state', 'company-city', 'company-postal-code');
+  // facility's required fields
+  $branch_fields = array('user-branch', 'branch-address-1', 'branch-country', 'branch-us-state', 'branch-city', 'branch-postal-code');
+  // contact details' required fields
+  $contact_fields = array('user-us-state');
+
+  // validate if a company is selected.
+  if ($values['user-company'] == '_none' && empty($values['user-create-option'])) {
+    form_set_error('user-company', t('Please select a company.'));
+    $errors = TRUE;
+  }
+  // is a valid node the selected company?
+  if (is_numeric($values['user-company'])) {
+    $company = node_load($values['user-company']);
+    if (empty($company) || $company->type != COMPANY_CONTENT_TYPE) {
+      form_set_error('user-company', t('Please select a company'));
+      $errors = TRUE;
+    }
+  }
+  // if create new company is checked, validate requiered fileds
+  if (!empty($values['user-create-option'])) {
+    foreach ($company_fields as $field_id => $value) {
+      if (empty($values[$value])) {
+        if (($value == 'company-us-state' && $values['company-country'] != 'US') ||
+            ($value == 'company-state' && $values['company-country'] == 'US')) {
+          continue;
+        }
+        $error_message = t("Company's %field_name is required.", array('%field_name' => $form['company-select'][$value]['#title']));
+        form_set_error($value, $error_message);
+        $errors = TRUE;
+      }
+    }
+  }
+
+  // validate if a facility is selected.
+  if ($values['user-branch'] == '_none' && empty($values['user-branch-create-option'])) {
+    form_set_error('user-branch', t('Please select a facility.'));
+    $errors = TRUE;
+  }
+
+  // is a valid node the selected facility?
+  if (is_numeric($values['user-branch'])) {
+    $branch = node_load($values['user-branch']);
+    if (empty($branch) || $branch->type != BRANCH_CONTENT_TYPE) {
+      form_set_error('user-branch', t('Please select a facility.'));
+      $errors = TRUE;
+    }
+  }
+  // if create new facility is checked, validate requiered fileds
+  if (!empty($values['user-branch-create-option'])) {
+    foreach ($branch_fields as $field_id => $value) {
+      if (empty($values[$value])) {
+        if (($value == 'branch-us-state' && $values['branch-country'] != 'US') ||
+            ($value == 'branch-state' && $values['branch-country'] == 'US')) {
+          continue;
+        }
+        $error_message = t("Facility's %field_name is required.", array('%field_name' => $form['branch-select'][$value]['#title']));
+        form_set_error($value, $error_message);
+        $errors = TRUE;
+      }
+    }
+  }
+
+  foreach ($contact_fields as $field_id => $value) {
+    if (empty($values[$value])) {
+      if (($value == 'user-us-state' && $values['user-country'] != 'US') ||
+          ($value == 'user-state' && $values['user-country'] == 'US')) {
+        continue;
+      }
+      $error_message = t("%field_name is required.", array('%field_name' => $form['user-select'][$value]['#title']));
+      form_set_error($value, $error_message);
+      $errors = TRUE;
+    }
+  }
+
+  // Check address field ajax submit.
+  $is_ajax = arg(1);
+  if (!$errors && $is_ajax != 'ajax') {
+    api_users_form_user_register_form_save_user_data($form, $form_state);
+  } else {
+    // rebuild facility options.
+    $options = array('_none' => t('Facility not found (Not applicable)'));
+    if (!empty($company->nid)) {
+      $facilities = api_users_get_company_branches($company->nid);
+      if (!empty($facilities)) {
+        foreach ($facilities as $key => $nid) {
+          $facility = node_load($nid);
+          $options[$nid] = $facility->title;
+        }
+      }
+    }
+    $form['branch-select']['user-branch']['#options'] = $options;
+    if (!empty($branch)) {
+      $form['branch-select']['user-branch']['#default_value'] = $branch->nid;
+    }
+  }
+}
+
+/*
+ * Helper to save user related data.
+ */
+function api_users_form_user_register_form_save_user_data(&$form, &$form_state) {
+  $values = &$form_state['values'];
+  $company_nid = NULL;
+  $branch_nid = NULL;
+
+  // create a new company
+  if (!empty($values['user-create-option'])) {
+    $company_state = $values['company-state'];
+    if ($values['company-country'] == 'US') {
+      $company_state = $values['company-us-state'];
+    }
+    $company = new stdClass();
+
+    $company->title = filter_xss($values['company-name']);
+    $company->type = COMPANY_CONTENT_TYPE;
+    node_object_prepare($company); // Sets some defaults. Invokes hook_prepare() and hook_node_prepare().
+    $company->language = LANGUAGE_NONE; // Or e.g. 'en' if locale is enabled
+    $company->uid = 1;
+    $company->status = 1; //(1 or 0): published or not
+    $company->promote = 0; //(1 or 0): promoted to front page
+    $company->comment = 0; // 0 = comments disabled, 1 = read only, 2 = read/write
+
+    $company->field_address[LANGUAGE_NONE][] = array(
+      'country' => filter_xss($values['company-country']),
+      'administrative_area' => filter_xss($company_state),
+      'sub_administrative_area' => NULL,
+      'locality' => filter_xss($values['company-city']),
+      'dependent_locality' => NULL,
+      'province_region' => filter_xss($values['company-province-region']),
+      'postal_code' => filter_xss($values['company-postal-code']),
+      'thoroughfare' => filter_xss($values['company-address-1']),
+      'premise' => filter_xss($values['company-address-2']),
+      'sub_premise' => NULL,
+      'organisation_name' => NULL,
+      'name_line' => NULL,
+      'first_name' => NULL,
+      'last_name' => NULL,
+      'data' => NULL,
+    );
+    $company->field_tel[LANGUAGE_NONE][] = array('value' => filter_xss($values['company-primary-telephone']));
+
+
+    if (!empty($values['company-work-types'])) {
+      $work_types = array();
+      foreach ($values['company-work-types'] as $key => $value) {
+        $work_types[]['value'] = $value;
+      }
+      $company->field_types_of_work[LANGUAGE_NONE] = $work_types;
+    }
+
+    if (!empty($values['company-countries-operation'])) {
+      $countries = array();
+      foreach ($values['company-countries-operation'] as $key => $value) {
+        $countries[]['iso2'] = $value;
+      }
+      $company->field_country[LANGUAGE_NONE] = $countries;
+    }
+
+    if (!empty($values["company-state-provinces"] )) {
+      $states = array();
+      foreach ($values['company-state-provinces'] as $key => $value) {
+        $states[]['value'] = $value;
+      }
+      $company->field_us_states[LANGUAGE_NONE] = $states;
+    }
+
+    $company = node_submit($company); // Prepare node for saving
+    node_save($company);
+    $company_nid = $company->nid;
+  } else {
+    $company_nid = filter_xss($values['user-company']);
+    $company = node_load($company_nid);
+  }
+  $company_name = $company->title;
+
+  // create a new facility
+  if (!empty($values['user-branch-create-option'])) {
+    $branch_state = $values['branch-state'];
+    if ($values['branch-country'] == 'US') {
+      $branch_state = $values['branch-us-state'];
+    }
+
+    $branch_title = t('@company-name - @city @state', array('@company-name'=> $values['company-name'], '@city' => $values['branch-city'], '@state' => $branch_state));
+
+    if (!empty($values['branch-ust'])) {
+      $branch_title = filter_xss($values['branch-ust']);
+    }
+    $branch = new stdClass();
+    $branch->title = $branch_title;
+    $branch->type = BRANCH_CONTENT_TYPE;
+    node_object_prepare($branch); // Sets some defaults. Invokes hook_prepare() and hook_node_prepare().
+    $branch->language = LANGUAGE_NONE; // Or e.g. 'en' if locale is enabled
+    $branch->uid = 1;
+    $branch->status = 1; //(1 or 0): published or not
+    $branch->promote = 0; //(1 or 0): promoted to front page
+    $branch->comment = 0; // 0 = comments disabled, 1 = read only, 2 = read/write
+
+    $branch->field_address[LANGUAGE_NONE][] = array(
+      'country' => filter_xss($values['branch-country']),
+      'administrative_area' => filter_xss($branch_state),
+      'sub_administrative_area' => NULL,
+      'locality' => filter_xss($values['branch-city']),
+      'dependent_locality' => NULL,
+      'province_region' => filter_xss($values['branch-province-region']),
+      'postal_code' => filter_xss($values['branch-postal-code']),
+      'thoroughfare' => filter_xss($values['branch-address-1']),
+      'premise' => filter_xss($values['branch-address-2']),
+      'sub_premise' => NULL,
+      'organisation_name' => NULL,
+      'name_line' => NULL,
+      'first_name' => NULL,
+      'last_name' => NULL,
+      'data' => NULL,
+    );
+    $branch->field_tel[LANGUAGE_NONE][] = array('value' => filter_xss($values['branch-primary-telephone']));
+    // Company reference field
+    $branch->field_company[LANGUAGE_NONE][] = array(
+      'target_id' => $company_nid,
+      'target_type' => 'node',
+    );
+    $branch = node_submit($branch); // Prepare node for saving
+    node_save($branch);
+    $branch_nid = $branch->nid;
+  } else {
+    $branch_nid = filter_xss($values['user-branch']);
+    $branch = node_load($branch_nid);
+  }
+
+  // Reference branch to user
+  $values['field_branch'][LANGUAGE_NONE][0] = array(
+    'target_id' => $branch_nid,
+    'target_type' => 'node',
+  );
+
+  // Save the company name
+  $form_state['values']['field_company_name'][LANGUAGE_NONE][0] = array(
+    'value' => $company_name
+  );
+
+  // Save the information of the Company and Facility
+  $form_state['values']['field_local_company_address'][LANGUAGE_NONE][0] = array(
+    'country' => $company->field_address[LANGUAGE_NONE][0]['country'],
+    'administrative_area' => $company->field_address[LANGUAGE_NONE][0]['administrative_area'],
+    'sub_administrative_area' => NULL,
+    'locality' => $company->field_address[LANGUAGE_NONE][0]['locality'],
+    'dependent_locality' => NULL,
+    'province_region' => $company->field_address[LANGUAGE_NONE][0]['province_region'],
+    'postal_code' => $company->field_address[LANGUAGE_NONE][0]['postal_code'],
+    'thoroughfare' => $company->field_address[LANGUAGE_NONE][0]['thoroughfare'],
+    'premise' => $company->field_address[LANGUAGE_NONE][0]['premise'],
+    'sub_premise' => NULL,
+    'organisation_name' => NULL,
+    'name_line' => NULL,
+    'first_name' => NULL,
+    'last_name' => NULL,
+    'data' => NULL,
+  );
+  $form_state['values']['field_local_company_region'][LANGUAGE_NONE][0] = array(
+    'value' => 'N/A'
+  );
+  $form_state['values']['field_local_company_telfax'][LANGUAGE_NONE][0] = array(
+    'value' => $company->field_tel[LANGUAGE_NONE][0]['value']
+  );
+  $form_state['values']['field_local_facility_address'][LANGUAGE_NONE][0] = array(
+    'country' => $branch->field_address[LANGUAGE_NONE][0]['country'],
+    'administrative_area' => $branch->field_address[LANGUAGE_NONE][0]['administrative_area'],
+    'sub_administrative_area' => NULL,
+    'locality' => $branch->field_address[LANGUAGE_NONE][0]['locality'],
+    'dependent_locality' => NULL,
+    'province_region' => $branch->field_address[LANGUAGE_NONE][0]['province_region'],
+    'postal_code' => $branch->field_address[LANGUAGE_NONE][0]['postal_code'],
+    'thoroughfare' => $branch->field_address[LANGUAGE_NONE][0]['thoroughfare'],
+    'premise' => $branch->field_address[LANGUAGE_NONE][0]['premise'],
+    'sub_premise' => NULL,
+    'organisation_name' => NULL,
+    'name_line' => NULL,
+    'first_name' => NULL,
+    'last_name' => NULL,
+    'data' => NULL,
+  );
+  $form_state['values']['field_local_facility_region'][LANGUAGE_NONE][0] = array(
+    'value' => 'N/A'
+  );
+  $form_state['values']['field_local_facility_telfax'][LANGUAGE_NONE][0] = array(
+    'value' => $branch->field_tel[LANGUAGE_NONE][0]['value']
+  );
+  $form_state['values']['field_local_facility_id'][LANGUAGE_NONE][0] = array(
+    'value' => 0
+  );
+
+  $form['field_branch'][LANGUAGE_NONE][0]['target_id']['#default_value'] = $branch_nid;
+
+  // User details info
+  $user_state = $values['user-state'];
+  if ($values['user-country'] == 'US') {
+    $user_state = $values['user-us-state'];
+  }
+  $form_state['values']['field_address'][LANGUAGE_NONE][0] = array(
+    'country' => filter_xss($values['user-country']),
+    'administrative_area' => filter_xss($user_state),
+    'sub_administrative_area' => NULL,
+    'locality' => filter_xss($values['user-city']),
+    'dependent_locality' => NULL,
+    'province_region' => filter_xss($values['user-province-region']),
+    'postal_code' => filter_xss($values['user-postal-code']),
+    'thoroughfare' => filter_xss($values['user-address-1']),
+    'premise' => filter_xss($values['user-address-2']),
+    'sub_premise' => NULL,
+    'organisation_name' => NULL,
+    'name_line' => NULL,
+    'first_name' => NULL,
+    'last_name' => NULL,
+    'data' => NULL,
+  );
+  $form_state['values']['field_tel'][LANGUAGE_NONE][0] = array(
+    'value' => filter_xss($values['user-primary-telephone'])
+  );
+
+}
+
+function api_users_inline_entity_form_reference_form_alter(&$reference_form, &$form_state) {
+  if($reference_form['#entity_type'] == 'node') {
+    $field = field_info_field($reference_form['#parents'][0]);
+    $nodes = node_load_multiple(array(), array('type' => reset($field['settings']['handler_settings']['target_bundles'])));
+    $options = array();
+    foreach($nodes as $node){
+      $options[$node->title.' ('.$node->nid.')'] = $node->title;
+    }
+    $reference_form['entity_id']['#type'] = 'select';
+    $reference_form['entity_id']['#options'] = $options;
+  }
+}
+
+function api_users_form_user_profile_form_alter(&$form, &$form_state) {
+  drupal_set_title(t('My Profile'));
+  // Hide the 'Company Name' field in the user profile
+  $form['field_company_name']['#access'] = FALSE;
+  $form['field_date_of_registration']['#access'] = FALSE;
+
+  // Hide the 'Faclity Region' field in the user profile. TO-DO: remove this field with a hook_update.
+  $form['field_local_faclity_region']['#access'] = FALSE;
+
+  $form['#attached']['js'][drupal_get_path('module', 'api_users') . '/js/api_users.js'] = array(
+    'type' => 'file',
+  );
+
+  // Add company's and facility's fields to profile form.
+  _api_users_form_company_fields($form);
+
+  $profile = $form['#user'];
+  $branch_nid = _api_custom_field_item('user', $profile, 'field_branch', 'target_id');
+  $company_nid = _get_user_company($profile->uid);
+
+  // Build facility options.
+  $branch_options = array('_none' => t('Facility not found (Not applicable)'));
+  if (!empty($company_nid)) {
+    $form['company-select']['user-company']['#default_value'] = $company_nid;
+    $form['branch-select']['user-branch']['#default_value'] = $branch_nid;
+
+    $facilities = api_users_get_company_branches($company_nid);
+    if (!empty($facilities)) {
+      foreach ($facilities as $key => $nid) {
+        $facility = node_load($nid);
+        $branch_options[$nid] = $facility->title;
+      }
+    }
+  } else {
+    $form['company-select']['user-company']['#default_value'] = '_none';
+    $form['branch-select']['user-branch']['#default_value'] = '_none';
+  }
+  $form['branch-select']['user-branch']['#options'] = $branch_options;
+
+  $form['#attached']['js'][drupal_get_path('module', 'api_users') . '/js/api_users_profile_form.js'] = array(
+    'type' => 'file',
+  );
+
+  field_group_hide_field_groups($form, array('group_local_company', 'group_local_facility', 'group_contact_details'));
+
+  $form['#submit'][] = 'api_users_form_user_profile_form_submit';
+  $form['account']['current_pass']['#title'] = t('Password');
+
+  $form['#after_build'][] = 'api_users_form_user_profile_form_after_build';
+
+  // Hide status input for no admin users.
+  if (!user_access('api users admin')) {
+    $form['account']['status']['#access'] = FALSE;
+  }
+
+  // Set default values.
+  $field_address = $form['field_address'][LANGUAGE_NONE][0]['#address'];
+  $form['user-select']['user-address-1']['#default_value'] = $field_address['thoroughfare'];
+  $form['user-select']['user-address-2']['#default_value'] = $field_address['premise'];
+  $form['user-select']['user-country']['#default_value'] = $field_address['country'];
+  $form['user-select']['user-state']['#default_value'] = $field_address['administrative_area'];
+  $form['user-select']['user-us-state']['#default_value'] = $field_address['administrative_area'];
+  $form['user-select']['user-city']['#default_value'] = $field_address['locality'];
+  $form['user-select']['user-province-region']['#default_value'] = $field_address['province_region'];
+  $form['user-select']['user-postal-code']['#default_value'] = $field_address['postal_code'];
+  $form['user-select']['user-primary-telephone']['#default_value'] = $form['field_tel'][LANGUAGE_NONE][0]['value']['#default_value'];
+
+  $form['my-purchases'] = array(
+    '#type' => 'markup',
+    '#markup' => '<div id="my-purchases">&nbsp;</div>'
+  );
+  $form['purchases'] = array(
+    '#title' => t('Purchases'),
+    '#type' => 'fieldset'
+  );
+  $form['purchases']['purchases-block'] = array(
+    '#type' => 'markup',
+    '#markup' => views_embed_view('purchases', 'block_1', $profile->uid)
+  );
+  $form['safetykeys'] = array(
+    '#title' => t('Safety Keys'),
+    '#type' => 'fieldset'
+  );
+  $form['safetykeys']['safetykeys-block'] = array(
+    '#type' => 'markup',
+    '#markup' => views_embed_view('safety_keys', 'block_safety_keys',$profile->uid)
+  );
+  $form['#prefix'] = !empty($form['#prefix']) ? $form['#prefix'] : '';
+  $form['#prefix'] .= '<div class="my-profile-anchors">';
+  $form['#prefix'] .= l(t('Details'), 'user/'.$profile->uid.'/edit', array('fragment' => 'block-system-main','attributes' => array('class'=> array('button primary'))));
+  $form['#prefix'] .= l(t('Purchases'), 'user/'.$profile->uid.'/edit', array('fragment' => 'my-purchases','attributes' => array('class'=> array('button primary'))));
+  $form['#prefix'] .= l(t('Safety Keys'), 'user/'.$profile->uid.'/edit', array('fragment' => 'edit-safetykeys','attributes' => array('class'=> array('button primary'))));
+  if (in_array('company admin', $profile->roles)) {
+    $form['#prefix'] .= l(t('Company Admin'), 'admin/people/api/company/api-users', array('attributes' => array('class'=> array('button primary'))));
+    //$form['#prefix'] .= l(t('Pre-registration'), 'import/users', array('attributes' => array('class'=> array('button primary'))));
+    $form['#prefix'] .= l(t('Tokens'), 'admin/company/tokens', array('attributes' => array('class'=> array('button primary'))));
+  }
+  $form['#prefix'] .= '</div>';
+}
+
+/**
+ * after_build callback.
+ */
+function api_users_form_user_profile_form_after_build($form, &$form_state) {
+  $form['account']['pass']['pass1']['#title'] = t('New Password');
+  return $form;
+}
+
+/**
+ * Custom submit handler for profile form.
+ */
+function api_users_form_user_profile_form_submit($form, &$form_state) {
+  // Redirect only if the user is not an admin.
+  if(!user_access('administer users')){
+    $form_state['redirect'] = "user";
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ *
+ * Used for enabling using templates inside my module
+ */
+function api_users_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'api_users'),
+    'template path' => drupal_get_path('module', 'api_users') . '/templates',
+  );
+}
+
+/**
+ * Returns company's branches nid.
+ * @param $nid
+ *   A Company nid.
+ */
+function api_users_get_company_branches($nid) {
+  if (!empty($nid) && is_numeric($nid)) {
+    // Is $nid a valid company nid?
+    $company = node_load($nid);
+    if ($company->type == COMPANY_CONTENT_TYPE) {
+      // Get company's branches
+      $branchesQuery = new EntityFieldQuery();
+      $branchesQuery->entityCondition('entity_type', 'node')
+        ->propertyCondition('type',   BRANCH_CONTENT_TYPE)
+        ->propertyCondition('status', NODE_PUBLISHED)
+        ->fieldCondition('field_company', 'target_id', $nid);
+      $result = $branchesQuery->execute();
+      if(isset($result['node'])){
+        $branches = array_keys($result['node']);
+        return $branches;
+      }
+    }
+  }
+  return NULL;
+}
+
+/**
+ * Returns company's users uid.
+ * @param $nid
+ *   A Company nid.
+ */
+function api_users_get_company_employees($nid) {
+  if (!empty($nid) && is_numeric($nid)) {
+    // Get company's branches
+    $branches = api_users_get_company_branches($nid);
+    if(!empty($branches)){
+      // Get branch's employees
+      $usersQuery = new EntityFieldQuery();
+      $usersQuery->entityCondition('entity_type', 'user')
+        ->propertyCondition('status', 1)
+        ->fieldCondition('field_branch', 'target_id', $branches);
+      $result = $usersQuery->execute();
+      if(isset($result['user'])){
+        $users = array_keys($result['user']);
+        return $users;
+      }
+    }
+  }
+  return NULL;
+}
+
+/**
+ * Returns branch's users uid.
+ * @param $nid
+ *   A branch nid.
+ */
+function api_users_get_branch_employees($nid) {
+  if (!empty($nid) && is_numeric($nid)) {
+    // Is $nid a valid branch nid?
+    $branch = node_load($nid);
+    if ($branch->type == BRANCH_CONTENT_TYPE) {
+      // Get branch's employees
+      $usersQuery = new EntityFieldQuery();
+      $usersQuery->entityCondition('entity_type', 'user')
+        ->propertyCondition('status', 1)
+        ->fieldCondition('field_branch', 'target_id', $nid);
+      $result = $usersQuery->execute();
+      if(isset($result['user'])){
+        $users = array_keys($result['user']);
+        return $users;
+      }
+    }
+  }
+  return NULL;
+}
+
+/**
+ * Returns company's safety keys.
+ * @param $nid
+ *   A Company nid.
+ */
+function api_users_get_company_safety_keys($nid) {
+  $safety_keys = array();
+  // Search by company name
+  $company = node_load($nid);
+
+  // Query to the database.
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', SAFETY_KEY_ENTITY)->fieldCondition('field_safety_company', 'value', $company->title);
+  $result = $query->execute();
+  // Return safety key if found.
+  if (isset($result['safety_key'])) {
+    foreach($result['safety_key'] as $key => $sk) {
+      $safety_key = safety_key_load($key);
+      if(!api_safety_keys_expired($safety_key)) {
+        $safety_keys[$key] = $safety_key;
+      }
+    }
+  }
+
+  return $safety_keys;
+}
+
+/**
+ * Helper funtion for company and facility selection widget.
+ *
+ * @param $form
+ *   A form where attatch company's fields.
+ */
+function _api_users_form_company_fields(&$form) {
+  global $user;
+
+  // Company section.
+  $form['company-select'] = array(
+    '#title' => t('Company Details'),
+    '#type' => 'fieldset'
+  );
+
+  // Get companies.
+  $companies['_none'] = t('Not Applicable  (Select this if your company is not listed)');
+  $companies += api_custom_companies();
+
+  // Company selection.
+  $form['company-select']['user-company'] = array(
+    '#title' => t('Company Name'),
+    '#type' => 'select',
+    '#options' => $companies,
+    '#states' => array(
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => FALSE)
+      )
+    )
+  );
+
+  // For Company Admin users, allow them to create users only for their company.
+  if (in_array('company admin', $user->roles)) {
+    $company_nid = _get_user_company($user->uid);
+    $form['company-select']['user-company']['#default_value'] = $company_nid;
+    $form['company-select']['user-company']['#disabled'] = TRUE;
+  }
+
+  // Option to change user' company(logged in user only).
+  if ($form['#form_id'] == 'user_profile_form') {
+    $form['company-select']['user-change-company'] = array(
+      '#title' => t('The company isn\'t listed?'),
+      '#type' => 'radios',
+      '#options' => drupal_map_assoc(array(t('Change my company'))),
+    );
+  }
+
+  // Selected company info
+  $form['company-select']['company-info'] = array(
+    '#type' => 'markup',
+    '#markup' => '<div class="company-details ajax-progress ajax-progress-throbber"><div class="company-info"></div></div>'
+  );
+
+  // Create a new company?
+  $form['company-select']['user-create-option'] = array(
+    '#title' => t('Your company isn\'t listed?'),
+    '#type' => 'radios',
+    '#options' => drupal_map_assoc(array(t('Create a new company'))),
+    '#states' => array(
+      'visible' => array(
+        '#edit-user-company' => array('value' => '_none')
+      )
+    )
+  );
+
+  $countries['_none'] = t('Outside the United States');
+  $countries += _addressfield_country_options_list();
+  $us_states = _api_custom_get_us_states();
+
+  $form['company-select']['company-name'] = array(
+    '#title' => t('Company Name'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      ),
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  $form['company-select']['company-address-1'] = array(
+    '#title' => t('Address 1'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      ),
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  $form['company-select']['company-address-2'] = array(
+    '#title' => t('Address 2'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  $form['company-select']['company-country'] = array(
+    '#title' => t('Country'),
+    '#type' => 'select',
+    '#options' => $countries,
+    '#default_value' => 'US',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      ),
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  $form['company-select']['company-city'] = array(
+    '#title' => t('City'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      ),
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+  $form['company-select']['company-state'] = array(
+    '#title' => t('State'),
+    '#type' => 'textfield',
+    '#access' => FALSE,
+    '#states' => array(
+      'invisible' => array(
+        '#edit-company-country' => array('value' => 'US')
+      ),
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+  $form['company-select']['company-us-state'] = array(
+    '#title' => t('State'),
+    '#type' => 'select',
+    '#options' => $us_states,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE),
+        '#edit-company-country' => array('value' => 'US'),
+      ),
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE),
+        '#edit-company-country' => array('value' => 'US'),
+      )
+    )
+  );
+   $form['company-select']['company-province-region'] = array(
+    '#title' => t('Province / Region'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  $form['company-select']['company-postal-code'] = array(
+    '#title' => t('ZIP / Postal Code'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      ),
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+  $form['company-select']['company-primary-telephone'] = array(
+    '#title' => t('Primary Telephone'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  if (in_array(COMPANY_ADMIN_ROLE, $user->roles)) {
+
+    $work_types = api_company_get_work_types();
+    $form['company-select']['company-work-types'] = array(
+      '#title' => t('Work Types'),
+      '#type' => 'select',
+      '#multiple' => TRUE,
+      '#options' => $work_types,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="user-create-option"]' => array('checked' => TRUE)
+        )
+      )
+    );
+
+    $countries_operation = _addressfield_country_options_list();
+
+    $form['company-select']['company-countries-operation'] = array(
+      '#title' => t('Countries of Operation'),
+      '#type' => 'select',
+      '#multiple' => TRUE,
+      '#options' => $countries_operation,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="user-create-option"]' => array('checked' => TRUE)
+        )
+      )
+    );
+
+    $states_provinces = $us_states;
+    unset($states_provinces['']);
+    $form['company-select']['company-state-provinces'] = array(
+      '#title' => t('State / Provinces'),
+      '#type' => 'select',
+      '#multiple' => TRUE,
+      '#options' => $states_provinces,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="user-create-option"]' => array('checked' => TRUE)
+        )
+      )
+    );
+  }
+
+  // Branch selection.
+  $form['branch-select'] = array(
+    '#title' => t('Facility Details'),
+    '#type' => 'fieldset',
+    '#states' => array(
+      'invisible' => array(
+        '#edit-user-company' => array('value' => '_none')
+      ),
+      'visible' => array(
+        ':input[name="user-create-option"]' => array('checked' => TRUE)
+      ),
+    ),
+  );
+  $form['branch-select']['user-branch'] = array(
+    '#title' => t('Facility Name'),
+    '#type' => 'select',
+    '#validated' => TRUE,
+    '#options' => array('_none' => t('Facility not found (Not applicable)')),
+    '#attributes' => array(
+      'class' => array('chosen-select'),
+    ),
+    '#states' => array(
+      'invisible' => array(
+        '#edit-user-company' => array('value' => '_none')
+      ),
+      'required' => array(
+        ':input[name="user-create-option"]' => array('checked' => FALSE),
+        ':input[name="user-branch-create-option"]' => array('checked' => FALSE),
+      )
+    )
+  );
+  // Option to change user' branch(logged in user only).
+  if ($form['#form_id'] == 'user_profile_form') {
+    $form['branch-select']['user-change-branch'] = array(
+      '#title' => t('The facility isn\'t listed?'),
+      '#type' => 'radios',
+      '#options' => drupal_map_assoc(array(t('Change my facility'))),
+    );
+  }
+  // Selected branch info.
+  $form['branch-select']['branch-info'] = array(
+    '#type' => 'markup',
+    '#markup' => '<div class="branch-details ajax-progress ajax-progress-throbber"><div class="branch-info"></div></div>'
+  );
+
+  $form['branch-select']['user-branch-create-option'] = array(
+    '#title' => t('Your facility isn\'t listed?'),
+    '#type' => 'radios',
+    '#options' => drupal_map_assoc(array(t('Create a new facility'))),
+    '#states' => array(
+      'invisible' => array(
+        '#edit-user-company' => array('value' => '_none'),
+      ),
+    )
+  );
+
+  $form['branch-select']['branch-ust'] = array(
+    '#title' => t('Facility Name'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+
+  $form['branch-select']['branch-use-company-hq-info'] = array(
+    '#title' => t('Load the same data from the Company Details'),
+    '#type' => 'checkbox',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+
+  $form['branch-select']['branch-address-1'] = array(
+    '#title' => t('Address 1'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+      ),
+      'required' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+  $form['branch-select']['branch-address-2'] = array(
+    '#title' => t('Address 2'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  $form['branch-select']['branch-country'] = array(
+    '#title' => t('Country'),
+    '#type' => 'select',
+    '#options' => $countries,
+    '#default_value' => 'US',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE)
+      ),
+      'required' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+  $form['branch-select']['branch-city'] = array(
+    '#title' => t('City'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE)
+      ),
+      'required' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+  $form['branch-select']['branch-state'] = array(
+    '#title' => t('State'),
+    '#type' => 'textfield',
+    '#access' => FALSE,
+    '#states' => array(
+      'invisible' => array(
+        '#edit-branch-country' => array('value' => 'US')
+      ),
+      'required' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+  $form['branch-select']['branch-us-state'] = array(
+    '#title' => t('State'),
+    '#type' => 'select',
+    '#options' => $us_states,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+        '#edit-branch-country' => array('value' => 'US'),
+      ),
+      'required' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+        '#edit-branch-country' => array('value' => 'US'),
+      )
+    )
+  );
+  $form['branch-select']['branch-province-region'] = array(
+    '#title' => t('Province / Region'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  $form['branch-select']['branch-postal-code'] = array(
+    '#title' => t('ZIP / Postal Code'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE)
+      ),
+      'required' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE),
+      )
+    )
+  );
+  $form['branch-select']['branch-primary-telephone'] = array(
+    '#title' => t('Primary Telephone'),
+    '#type' => 'textfield',
+    '#states' => array(
+      'visible' => array(
+        ':input[name="user-branch-create-option"]' => array('checked' => TRUE)
+      )
+    )
+  );
+  $form['#validate'][] = 'api_users_form_user_register_form_alter_validate';
+
+  //$form['#submit'][] = 'api_users_form_user_register_form_alter_submit';
+  $form['field_branch']['#access'] = FALSE;
+
+  // User details section.
+  $form['user-select'] = array(
+    '#title' => t('Personal Details'),
+    '#type' => 'fieldset',
+  );
+
+  $form['user-select']['user-use-branch-info'] = array(
+    '#title' => t('Load the same address from the Facility Details'),
+    '#type' => 'checkbox',
+  );
+
+  $form['user-select']['user-address-1'] = array(
+    '#title' => t('Address 1'),
+    '#type' => 'textfield',
+    '#required' => TRUE,
+  );
+  $form['user-select']['user-address-2'] = array(
+    '#title' => t('Address 2'),
+    '#type' => 'textfield',
+  );
+  $form['user-select']['user-country'] = array(
+    '#title' => t('Country'),
+    '#type' => 'select',
+    '#options' => $countries,
+    '#default_value' => 'US',
+    '#required' => TRUE,
+  );
+  $form['user-select']['user-city'] = array(
+    '#title' => t('City'),
+    '#type' => 'textfield',
+    '#required' => TRUE,
+  );
+  $form['user-select']['user-state'] = array(
+    '#title' => t('State'),
+    '#type' => 'textfield',
+    '#access' => FALSE,
+    '#states' => array(
+      'invisible' => array(
+        '#edit-user-country' => array('value' => 'US')
+      ),
+      'required' => array(
+        '#edit-user-us-state' => array('value' => ''),
+      )
+    )
+  );
+  $form['user-select']['user-us-state'] = array(
+    '#title' => t('State'),
+    '#type' => 'select',
+    '#options' => $us_states,
+    '#states' => array(
+      'visible' => array(
+        '#edit-user-country' => array('value' => 'US'),
+      ),
+      'required' => array(
+        '#edit-user-country' => array('value' => 'US'),
+      )
+    )
+  );
+  $form['user-select']['user-province-region'] = array(
+    '#title' => t('Province / Region'),
+    '#type' => 'textfield',
+  );
+  $form['user-select']['user-postal-code'] = array(
+    '#title' => t('ZIP / Postal Code'),
+    '#type' => 'textfield',
+    '#required' => TRUE,
+  );
+  $form['user-select']['user-primary-telephone'] = array(
+    '#title' => t('Primary Telephone'),
+    '#type' => 'textfield',
+  );
+
+  $form['#group_children']['user-use-branch-info'] = 'group_contact_details';
+
+}
+
+/**
+ * Implements hook_user_update().
+ */
+function api_users_user_update(&$edit, $account, $category) {
+  if($category == 'account' &&
+      !empty($edit['field_branch'][LANGUAGE_NONE][0]['target_id']) &&
+      !empty($edit['original']->field_branch[LANGUAGE_NONE][0]['target_id']) &&
+      $edit['field_branch'][LANGUAGE_NONE][0]['target_id'] != $edit['original']->field_branch[LANGUAGE_NONE][0]['target_id']) {
+
+    // Return if is the user account activation
+    if ($account->uid && $account->status === "0" && $edit['status'] == 1) {
+      return;
+    }
+
+    $old_branch = node_load($edit['original']->field_branch[LANGUAGE_NONE][0]['target_id']);
+    $old_company = _api_custom_field_item('node', $old_branch, 'field_company', 'target_id');
+    $new_branch = node_load($edit['field_branch'][LANGUAGE_NONE][0]['target_id']);
+    $new_company = _api_custom_field_item('node', $new_branch, 'field_company', 'target_id');
+
+    // Send email only when user change the company is working for.
+    if (!empty($old_company) && !empty($new_company) && $old_company != $new_company) {
+      // Get company admins email.
+      $old_branch_admins_uids = _get_company_admins($old_company);
+      $old_branch_admins = user_load_multiple($old_branch_admins_uids);
+      $new_branch_admins_uids = _get_company_admins($new_company);
+      $new_branch_admins = user_load_multiple($new_branch_admins_uids);
+
+      $emails = array_merge($old_branch_admins, $new_branch_admins);
+      array_walk($emails, '_get_object_property', 'mail');
+      global $base_url;
+
+      // Email body.
+      $first_name = _api_custom_field_item('user', $account, 'field_first_name', 'value');
+      $last_name = _api_custom_field_item('user', $account, 'field_last_name', 'value');
+
+      $branch_name = check_plain($new_branch->title);
+      $branch_address_1 = _api_custom_field_item('node', $new_branch, 'field_address', 'thoroughfare');
+      $branch_address_2 = _api_custom_field_item('node', $new_branch, 'field_address', 'premise');
+      $branch_country = _api_custom_field_item('node', $new_branch, 'field_address', 'country');
+      $branch_state = _api_custom_field_item('node', $new_branch, 'field_address', 'administrative_area');
+      $branch_city = _api_custom_field_item('node', $new_branch, 'field_address', 'locality');
+      $branch_province_region = _api_custom_field_item('node', $new_branch, 'field_address', 'province_region');
+      $branch_zip = _api_custom_field_item('node', $new_branch, 'field_address', 'postal_code');
+      $branch_tel = _api_custom_field_item('node', $new_branch, 'field_tel');
+
+      $old_company_node = node_load($old_company);
+      $new_company_node = node_load($new_company);
+      $old_company_title = $old_company_node->title;
+      $new_company_title = $new_company_node->title;
+
+      $company_address_1 = _api_custom_field_item('node', $new_company_node, 'field_address', 'thoroughfare');
+      $company_address_2 = _api_custom_field_item('node', $new_company_node, 'field_address', 'premise');
+      $company_country = _api_custom_field_item('node', $new_company_node, 'field_address', 'country');
+      $company_state = _api_custom_field_item('node', $new_company_node, 'field_address', 'administrative_area');
+      $company_city = _api_custom_field_item('node', $new_company_node, 'field_address', 'locality');
+      $company_province_region = _api_custom_field_item('node', $new_company_node, 'field_address', 'province_region');
+      $company_zip = _api_custom_field_item('node', $new_company_node, 'field_address', 'postal_code');
+      $company_tel = _api_custom_field_item('node', $new_company_node, 'field_tel');
+
+
+      $types_of_work = _api_custom_field_item('node', $new_company_node, 'field_types_of_work', 'value', NULL);
+      $us_states = _api_custom_field_item('node', $new_company_node, 'field_us_states', 'value', NULL);
+      $countries = _api_custom_field_item('node', $new_company_node, 'field_country', 'iso2', NULL);
+      // Add work type name to response
+      if (!empty($types_of_work)) {
+        $work_types = api_company_get_work_types();
+        foreach ($types_of_work as $key => $type_of_work) {
+          $type_id = $type_of_work['value'];
+          if (!empty($work_types[$type_id])) {
+            $name_types_of_work[] = $work_types[$type_id];
+          }
+        }
+      }
+
+      // Add state name.
+      if (!empty($us_states)) {
+        $states = _api_custom_get_us_states();
+        foreach ($us_states as $key => $us_state) {
+          $us_state_code = $us_state['value'];
+          if (!empty($states[$us_state_code])) {
+            $name_us_states[] = $states[$us_state_code];
+          }
+        }
+      }
+
+      if (!empty($countries)) {
+        $countries_list = _addressfield_country_options_list();
+        foreach ($countries as $key => $country) {
+          $country_code = $country['iso2'];
+          if (!empty($countries_list[$country_code])) {
+            $name_countries[] = $countries_list[$country_code];
+          }
+        }
+      }
+
+      $body = t('This is a notification that @first_name @last_name changed his company from @old_company_title to @new_company_title. If you do not agree with this change, please contact API Customer Support.<br>', array('@first_name' => $first_name, '@last_name' => $last_name, '@old_company_title' => $old_company_title, '@new_company_title' => $new_company_title));
+      $body .= t('<br>Company details:<br>');
+      $body .= !empty($company_address_1) ? t('Address 1: @company_address_1<br>', array('@company_address_1' => $company_address_1)) : '';
+      $body .= !empty($company_address_2) ? t('Address 2: @company_address_2<br>', array('@company_address_2' => $company_address_2)) : '';
+      $body .= !empty($company_country) ? t('Country: @company_country<br>', array('@company_country' => $company_country)) : '';
+      $body .= !empty($company_state) ? t('State: @company_state<br>', array('@company_state' => $company_state)) : '';
+      $body .= !empty($company_city) ? t('City: @company_city<br>', array('@company_city' => $company_city)) : '';
+      $body .= !empty($company_province_region) ? t('Province / Region: @company_province_region<br>', array('@company_province_region' => $company_province_region)) : '';
+      $body .= !empty($company_zip) ? t('ZIP / Postal Code: @company_zip<br>', array('@company_zip' => $company_zip)) : '';
+      $body .= !empty($company_tel) ? t('Primary telephone: @company_tel<br>', array('@company_tel' => $company_tel)) : '';
+      $body .= !empty($name_types_of_work) ? t('Work Types: @branch_types_of_work<br>', array('@branch_types_of_work' => implode(', ', $name_types_of_work))) : '';
+      $body .= !empty($name_countries) ? t('Countries of Operation: @branch_countries<br>', array('@branch_countries' => implode(', ', $name_countries))) : '';
+      $body .= !empty($name_us_states) ? t('State / Provinces: @branch_us_states<br>', array('@branch_us_states' => implode(', ', $name_us_states))) : '';
+
+      $body .= t('<br>Facility details:<br>');
+      $body .= t('UST / Facility: @branch_name<br>', array('@branch_name' => $branch_name));
+      $body .= !empty($branch_address_1) ? t('Address 1: @branch_address_1<br>', array('@branch_address_1' => $branch_address_1)) : '';
+      $body .= !empty($branch_address_2) ? t('Address 2: @branch_address_2<br>', array('@branch_address_2' => $branch_address_2)) : '';
+      $body .= !empty($branch_country) ? t('Country: @branch_country<br>', array('@branch_country' => $branch_country)) : '';
+      $body .= !empty($branch_state) ? t('State: @branch_state<br>', array('@branch_state' => $branch_state)) : '';
+      $body .= !empty($branch_city) ? t('City: @branch_city<br>', array('@branch_city' => $branch_city)) : '';
+      $body .= !empty($branch_province_region) ? t('Province / Region: @branch_province_region<br>', array('@branch_province_region' => $branch_province_region)) : '';
+      $body .= !empty($branch_zip) ? t('ZIP / Postal Code: @branch_zip<br>', array('@branch_zip' => $branch_zip)) : '';
+      $body .= !empty($branch_tel) ? t('Primary telephone: @branch_tel<br>', array('@branch_tel' => $branch_tel)) : '';
+
+      $body .= '<br><p>--  API WorkSafe team.</p>';
+
+      $subject = t('API WorkSafe - Change of company (@first_name @last_name)', array('@first_name' => $first_name, '@last_name' => $last_name));
+
+      $content = array();
+      $content['language'] = language_default();
+      $content['email_from'] = variable_get('system_mail', 'no-reply@api.org');
+      $content['params'] = array(
+        'headers' => array(
+          'MIME-Version' => '1.0',
+          'Content-Type' => 'text/html; charset=UTF-8; format=flowed',
+          'Content-Transfer-Encoding' => '8Bit',
+          'X-Mailer' => 'Drupal'
+        ),
+        'subject' => $subject,
+        'message' => $body,
+      );
+
+      foreach ($emails as $email) {
+        $message = drupal_mail('api_users', 'company_update', $email, $content['language'], $content['params'], $content['email_from']);
+      }
+    }
+  }
+}
+
+/**
+ * Callback function.
+ */
+function _get_object_property(&$item, $key, $property) {
+  $item = $item->$property;
+}
+
+/**
+ * Implements hook_module_implements_alter().
+ */
+function api_users_module_implements_alter(&$implementations, $hook) {
+  if (in_array($hook, array('form_alter')) && isset($implementations['commerce_kickstart_user'])) {
+    //remove commerce_kickstart_user form alter implementation since moving ours last is not working
+    unset($implementations['commerce_kickstart_user']);
+  }
+}
+
+/**
+ * Implements hook_services_request_postprocess_alter().
+ */
+function api_users_services_request_postprocess_alter($controller, $args, &$results) {
+  // Add State name to response.
+  if (!empty($results->field_address['und'][0]['administrative_area'])) {
+    $state_code = $results->field_address['und'][0]['administrative_area'];
+    $states = _api_custom_get_us_states();
+    if (!empty($states[$state_code])) {
+      $results->field_address['und'][0]['administrative_area_name'] = $states[$state_code];
+    }
+  }
+
+  // Add Country name to response.
+  if (!empty($results->field_address['und'][0]['country'])) {
+    $country_code = $results->field_address['und'][0]['country'];
+    $countries = _addressfield_country_options_list();
+    if (!empty($countries[$country_code])) {
+      $results->field_address['und'][0]['country_name'] = $countries[$country_code];
+    }
+  }
+
+  // Add work type name to response
+  if (!empty($results->field_types_of_work[LANGUAGE_NONE])) {
+    $work_types = api_company_get_work_types();
+    foreach ($results->field_types_of_work[LANGUAGE_NONE] as $key => &$type_of_work) {
+      $type_id = $type_of_work['value'];
+      $type_of_work['name'] = !empty($work_types[$type_id])? $work_types[$type_id] : '';
+    }
+  }
+
+  // Add state name.
+  if (!empty($results->field_us_states[LANGUAGE_NONE])) {
+    $states = _api_custom_get_us_states();
+    foreach ($results->field_us_states[LANGUAGE_NONE] as $key => &$us_states) {
+      $us_states_code = $us_states['value'];
+      $us_states['name'] = !empty($states[$us_states_code])? $states[$us_states_code] : '';
+    }
+  }
+  // Add countries where operates.
+  if (!empty($results->field_country[LANGUAGE_NONE])) {
+    $countries = _addressfield_country_options_list();
+    foreach ($results->field_country[LANGUAGE_NONE] as $key => &$country) {
+      $country_code = $country['iso2'];
+      $country['name'] = !empty($countries[$country_code])? $countries[$country_code] : '';
+    }
+  }
+
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function api_users_menu_alter(&$items) {
+  // Change my profile item weight.
+  $items['user/%user/edit']['weight'] = 1;
+  // Change my profile item type.
+  $items['user/%user/edit']['type'] = MENU_NORMAL_ITEM;
+  // Hide user profile page link.
+  unset($items['user/%user/view']['type']);
+  // Hide user addressbook page link.
+  unset($items['user/%user/addressbook']['type']);
+
+}
+
+/**
+ * Implements hook_permission().
+ */
+function api_users_permission() {
+  $perms = array(
+    'api users admin' => array(
+      'title' => t('Admin API users.'),
+    ),
+    'api users customer support' => array(
+      'title' => t('Access to customer support pages'),
+      'description' => t('Access to customer support pages.'),
+    ),
+  );
+
+  return $perms;
+}
+
+/**
+ * Implements hook_url_inbound_alter().
+ */
+function api_users_url_inbound_alter(&$path, $original_path, $path_language) {
+  global $user;
+  if ($path == 'user' && $user->uid) {
+    $path = 'user/' . $user->uid . '/edit';
+  }
+}
+
+function api_users_user_logout($account){
+  watchdog('user', 'Session closed for %name.', array('%name' => $account->name));
+
+  // Destroy the current session
+  session_destroy();
+
+  // Remove Moodle cookie session
+  setcookie("MoodleSession", "", time()-3600, "/");
+  setcookie("MoodleSession", "", time()-3600, "/platform/");
+}
+
+/**
+ * Implements hook_user_insert().
+ */
+function api_users_user_insert(&$edit, $account, $category) {
+  if (!empty($account->uid)) {
+    // find user's billing information
+    $billingQuery = new EntityFieldQuery();
+    $billingQuery->entityCondition('entity_type', 'commerce_customer_profile')
+      ->propertyCondition('type',   'billing')
+      ->propertyCondition('status', 1)
+      ->propertyCondition('uid', $account->uid);
+    $result = $billingQuery->execute();
+
+    // if user has not got billing info, add contact details to billing info.
+    if(empty($result['commerce_customer_profile'])){
+      $address = _api_custom_field_item('user', $account, 'field_address', NULL, NULL);
+      if (!empty($address[0])) {
+        // Create a billing customer profile.
+        $billingInfo = commerce_customer_profile_new('billing', $account->uid);
+        $billingInfo->status = 1; //(1 or 0): active or not
+        //name_line
+        $name_line = '';
+        $name[] = _api_custom_field_item('user', $account, 'field_first_name');
+        $name[] = _api_custom_field_item('user', $account, 'field_middle_name');
+        $name[] = _api_custom_field_item('user', $account, 'field_last_name');
+        $name_line = implode(' ', $name);
+
+        $address[0]['name_line'] = preg_replace('/\s+/', ' ', $name_line);
+        $address[0]['first_name'] = $name[0];
+        $address[0]['last_line'] = $name[2];
+        $billingInfo->commerce_customer_address[LANGUAGE_NONE][] = $address[0];
+        commerce_customer_profile_save($billingInfo);
+        commerce_addressbook_set_default_profile($billingInfo);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_admin_menu_output_alter().
+ */
+function api_users_admin_menu_output_alter(&$content) {
+  global $user;
+  // Add menu items to customer support users.
+  if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+    // admin/people/api/users
+    // admin/people
+    // admin/people/customer-support
+    $content['menu']['admin/people/api/users'] = array(
+      '#title' => t('User Administration'),
+      '#href' => 'admin/people/api/users',
+      '#weight' => -20,
+    );
+    $content['menu']['admin/people/customer-support'] = array(
+      '#title' => t('User Historical Information'),
+      '#href' => 'admin/people/customer-support',
+      '#weight' => -20,
+    );
+    $content['menu']['reports'] = array(
+      '#title' => t('Reports'),
+      '#href' => '#',//'admin/config/api/',
+      '#options' => array(
+          'external' => TRUE,
+        ),
+      '#weight' => 20,
+    );
+    $content['menu']['reports']['admin/config/api/emaintenance-report'] = array(
+      '#title' => t('eMaintenance Report'),
+      '#href' => 'admin/config/api/emaintenance-report',
+      '#weight' => 0,
+    );
+    $content['menu']['reports']['admin/config/api/massachusetts-report'] = array(
+      '#title' => t('Massachusetts Report'),
+      '#href' => 'admin/config/api/massachusetts-report',
+      '#weight' => 0,
+    );
+    $content['menu']['reports']['admin/config/api/sales-report'] = array(
+      '#title' => t('Sales Report'),
+      '#href' => 'admin/config/api/sales-report',
+      '#weight' => 1,
+    );
+    $content['menu']['admin/content/companies'] = array(
+      '#title' => t('Company Administration'),
+      '#href' => 'admin/content/companies',
+      '#weight' => 19,
+    );
+    unset($content['menu']['admin/content']);
+  }
+
+}
+
+function api_users_init(){
+  drupal_add_css(drupal_get_path('module', 'api_users') . '/css/purchases_print.css', array('media' => 'print'));
+}
+
+/**
+ * Get users count.
+ * @returns: Number of users active on the site.
+ */
+function api_users_get_users_count() {
+  $users_count = &drupal_static(__FUNCTION__);
+  if (!isset($users_count)) {
+    $query = db_select('users', 'u');
+    $query->fields('u', array('uid'));
+    $query->condition('status', 1, '=');
+    $users_count = $query->countQuery()->execute()->fetchField();
+  }
+  return $users_count;
+}
+
+/**
+ * Implements hook_user_delete().
+ */
+function api_users_user_delete($account) {
+  $user = user_load($account->uid);
+  // Get user facility nid.
+  $user_branch_nid = _api_custom_field_item('user', $user, 'field_branch', 'target_id');
+  if (!empty($user_branch_nid)) {
+    $userQuery = new EntityFieldQuery();
+    $userQuery->entityCondition('entity_type', 'user')
+      ->propertyCondition('uid', $account->uid, '<>')
+      ->fieldCondition('field_branch', 'target_id', $user_branch_nid);
+    $count = $userQuery->count()->execute();
+    // If there are not other users with the same facility, delete it.
+    if (empty($count)) {
+      // Delete facility.
+      node_delete($user_branch_nid);
+    }
+  }
+}
+
+/**
+ * Implements hook_mail().
+ */
+function api_users_mail($key, &$message, $params) {
+  $message['headers'] = array_merge($message['headers'], $params['headers']);
+  $message['subject'] = $params['subject'];
+  $message['body'][] = $params['message'];
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function api_users_ctools_plugin_api($module = NULL, $api = NULL) {
+  if ($module == 'feeds' && $api == 'plugins') {
+    return array("version" => "1");
+  }
+}
+
+/**
+ * Implements hook_feeds_plugins().
+ */
+function api_users_feeds_plugins() {
+$info = array();
+  $info['APIFeedsUserProcessor'] = array(
+    'name' => 'API Feeds User Processor',
+    'description' => 'Custom User Processor.',
+    'help' => 'Create users from parsed content.',
+    'handler' => array(
+      'parent' => 'FeedsProcessor',
+      'class' => 'APIFeedsUserProcessor',
+      'file' => 'APIFeedsUserProcessor.inc',
+      'path' => drupal_get_path('module', 'api_users') . '/inc',
+    ),
+  );
+  return $info;
+}
+
+/**
+ * Implements hook_feeds_after_save().
+ */
+function api_users_feeds_after_save($source, $entity, $item, $entity_id) {
+  if ($source->importer->id == 'users') {
+    global $user;
+    // check if a company admin is importing a user.
+    if (in_array(COMPANY_ADMIN_ROLE, $user->roles)) {
+      $user_object = user_load($user->uid);
+      // Get company admin company nid.
+      $company_nid = _get_user_company($user->uid);
+      $user_wrapper = entity_metadata_wrapper('user', $user_object);
+      $profile_wrapper = entity_metadata_wrapper('user', $entity);
+      // Set Company name
+      $company = node_load($company_nid);
+      $profile_wrapper->field_company_name = $company->title;
+      // If terms and conditions are not accepted, the user can't update their profile.
+      $profile_wrapper->field_accept_terms_and_condition = 1;
+      $profile_wrapper->field_public_safety_key = 1;
+      // Get facility datails from csv file.
+      // try to get a facility with $company_nid + $item['facility id']
+      $result = array();
+      if (!empty($item['facility id'])) {
+        $branchesQuery = new EntityFieldQuery();
+        $branchesQuery->entityCondition('entity_type', 'node')
+          ->propertyCondition('type',   BRANCH_CONTENT_TYPE)
+          ->propertyCondition('status', NODE_PUBLISHED)
+          ->propertyCondition('title', $item['facility id'])
+          ->fieldCondition('field_company', 'target_id', $company_nid);
+
+        $result = $branchesQuery->execute();
+      }
+
+      if(isset($result['node'])){
+        $branches = array_keys($result['node']);
+        $branch_nid = $branches[0];
+        $profile_wrapper->field_branch = $branch_nid;
+        $profile_wrapper->save();
+      } else {
+        // Create new facility.
+        $branch_title = t('@city @state', array('@city' => $item['company city'], '@state' => $item['company state']));
+
+        if (!empty($item['facility id'])) {
+          $branch_title = filter_xss($item['facility id']);
+        }
+        $branch = new stdClass();
+        $branch->title = $branch_title;
+        $branch->type = BRANCH_CONTENT_TYPE;
+        node_object_prepare($branch); // Sets some defaults. Invokes hook_prepare() and hook_node_prepare().
+        $branch->language = LANGUAGE_NONE; // Or e.g. 'en' if locale is enabled
+        $branch->uid = $user->uid;
+        $branch->status = 1; //(1 or 0): published or not
+        $branch->promote = 0; //(1 or 0): promoted to front page
+        $branch->comment = 0; // 0 = comments disabled, 1 = read only, 2 = read/write
+
+        $branch->field_address[LANGUAGE_NONE][] = array(
+          'country' => filter_xss($item['company country']),
+          'administrative_area' => filter_xss($item['company state']),
+          'sub_administrative_area' => NULL,
+          'locality' => filter_xss($item['company city']),
+          'dependent_locality' => NULL,
+          'province_region' => filter_xss($item['company region']),
+          'postal_code' => NULL,
+          'thoroughfare' => filter_xss($item['company address1']),
+          'premise' => filter_xss($item['company address2']),
+          'sub_premise' => NULL,
+          'organisation_name' => NULL,
+          'name_line' => NULL,
+          'first_name' => NULL,
+          'last_name' => NULL,
+          'data' => NULL,
+        );
+        $branch->field_tel[LANGUAGE_NONE][] = array('value' => filter_xss($item['company telephone no.']));
+        // Company reference field
+        $branch->field_company[LANGUAGE_NONE][] = array(
+          'target_id' => $company_nid,
+          'target_type' => 'node',
+        );
+        $branch = node_submit($branch); // Prepare node for saving
+        node_save($branch);
+        $branch_nid = $branch->nid;
+        $profile_wrapper->field_branch = $branch_nid;
+        $profile_wrapper->save();
+      }
+      // Send email with user password.
+      _api_users_feed_import_user_email($entity, $item);
+
+    }
+  }
+}
+
+function _api_users_feed_import_user_email($entity, $item) {
+  $mails[0]['body'] = "[user:name],
+
+  <p>A site administrator at [site:name] has created an account for you. You may now log in by clicking this link or copying and pasting it to your browser:</p>
+  [site:login-url]
+  <br/>
+  <p>--  [site:name] team</p>";
+  $mails[0]['body'] = token_replace($mails[0]['body'], array('user' => $entity));
+  $mails[0]['subject'] = t('An administrator created an account for you at [site:name]');
+  $mails[0]['subject'] = token_replace($mails[0]['subject'], array('user' => $entity));
+  $mails[0]['key'] = 'feed_user_import_admin_registration';
+
+  $body = $item['first name'] . ' ' . $item['last name'] . ',<br>';
+  $body .= t('<p>You can now log in to [site:login-url] using this credential:</p><br/>
+    username: [user:name] <br/>
+    password: @password
+  <p>--  [site:name] team</p>', array('@password' => $item['password']));
+  $body = token_replace($body, array('user' => $entity));
+  $mails[1]['body'] = $body;
+  $mails[1]['subject'] = t('API Worksafe - Account Information');
+  $mails[1]['key'] = 'feed_user_import';
+
+  $content = array();
+  $content['language'] = language_default();
+  $content['email_from'] = variable_get('system_mail', 'no-reply@api.org');
+  foreach ($mails as $mail) {
+    $content['params'] = array(
+      'headers' => array(
+        'MIME-Version' => '1.0',
+        'Content-Type' => 'text/html; charset=UTF-8; format=flowed',
+        'Content-Transfer-Encoding' => '8Bit',
+        'X-Mailer' => 'Drupal'
+      ),
+      'subject' => $mail['subject'],
+      'message' => $mail['body'],
+    );
+
+    $message = drupal_mail('api_users', $mail['key'], $entity->mail, $content['language'], $content['params'], $content['email_from']);
+  }
+
+}
+
+/**
+ * Implemets HOOK_form_FORM_ID_alter.
+ */
+function api_users_form_feeds_import_form_alter(&$form, &$form_state, $form_id) {
+  if ($form['#importer_id'] == 'users') {
+    drupal_set_title('Pre-registration');
+    $block = views_embed_view('api_users', 'company_admin_user_import_search');
+
+    $output .= '<fieldset id="search-user-block"><legend><span class="fieldset-legend">' . t('Search User') . '</span></legend>';
+    $output .= '<div class="ctools-collapsible-content">' . $block . '</div>';
+    $output .= '</fieldset>';
+    $form['#prefix'] = $output;
+    $form['feeds']['FeedsFileFetcher']['fid']['#value'] = NULL;
+    $form['feeds']['FeedsFileFetcher']['source']['#value'] = NULL;
+    $form['feeds']['FeedsFileFetcher']['upload']['#prefix'] = l(t('Download a template'), drupal_get_path('module', 'api_users') . '/templates/template.csv', array('language' => LANGUAGE_NONE));
+
+    $form['feeds']['FeedsFileFetcher']['upload']['#file_info'] = NULL;
+    $form['feeds']['FeedsFileFetcher']['upload']['#description'] = t('Select a file to import');
+    $form['source_status']['#access'] = FALSE;
+    $form['feeds']['FeedsCSVParser']['help']['#access'] = FALSE;
+    $form['feeds']['FeedsCSVParser']['delimiter']['#access'] = FALSE;
+    $form['feeds']['FeedsCSVParser']['no_headers']['#access'] = FALSE;
+    $form['submit']['#value'] = t('Send pre-registration');
+    $form['#attached']['js'][drupal_get_path('module', 'api_users') . '/js/api_users_feeds_import.js'] = array('type' => 'file');
+  }
+}
+
+/**
+ * Implements hook_views_pre_render().
+ */
+function api_users_views_pre_render(&$view) {
+  if ($view->name == 'companies') {
+    global $user;
+    if (in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+      $view->build_info['title'] = t('Company Administration');
+    }
+  }
+}

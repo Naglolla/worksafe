@@ -1,0 +1,29 @@
+/* Social buttons */
+.social {
+  margin: 30px;
+  text-align: right; 
+  > div {
+    height: 41px;
+    width: 41px;
+    background-color: @main-color-dark;
+    background-repeat: no-repeat;
+    background-position: 50%;
+    display: inline-block;
+    .border-radius(50%);
+    margin: 0 5px;
+    &.twitter {
+      background-image: url("@{images}/twitter.png");
+    }
+    &.facebook {
+      background-image: url("@{images}/facebook.png");
+    }
+    &.pinterest {
+      background-image:url("@{images}/pinterest.png");
+    }
+    &.g {
+      background-image:url("@{images}/google.png");
+    }
+  }
+}
+
+

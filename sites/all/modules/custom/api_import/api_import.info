@@ -1,0 +1,20 @@
+name = API Import
+description = Migration from legacy site.
+core = 7.x
+package = API IMPORT
+version = 7.x-1.0
+project = api_import
+dependencies[] = migrate
+dependencies[] = migrate_extras
+dependencies[] = locale
+
+files[] = includes/api_import.inc
+files[] = api_import.migrate.inc
+files[] = api_import_worktype.inc
+files[] = api_import_user.inc
+files[] = api_import_company.inc
+files[] = api_import_percentage_promo_codes.inc
+files[] = api_import_fixed_promo_codes.inc
+files[] = api_import_program.inc
+files[] = api_import_safetykeys.inc
+files[] = api_import_tokens.inc

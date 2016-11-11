@@ -1,0 +1,11 @@
+Fatal error: Call to a member function cache_reset() on a non-object in i18n_string.pages
+
+Issue
+White Screen when trying to translate strings that doesn't have a context.
+
+
+Fatal error: Call to a member function cache_reset() on a non-object in /home/domain/public_html/_new/sites/all/modules/i18n/i18n_string/i18n_string.pages.inc on line 402
+
+
+
+https://www.drupal.org/node/2227523#comment-8671971

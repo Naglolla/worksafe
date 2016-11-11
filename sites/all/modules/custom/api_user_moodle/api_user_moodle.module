@@ -1,0 +1,107 @@
+<?php
+/**
+ * @file
+ * Provides custom functionality for API User (Moodle).
+ */
+
+function api_user_moodle_user_login(&$edit, $account){
+  $moodle_user = api_user_moodle_get_user($account->name, $account->uid);
+  
+  if ($moodle_user){
+    
+    $moodle_user->firstname = $account->field_first_name[LANGUAGE_NONE][0]['value'] ? $account->field_first_name[LANGUAGE_NONE][0]['value']:$moodle_user->firstname;
+    $moodle_user->lastname = $account->field_last_name[LANGUAGE_NONE][0]['value'] ? $account->field_last_name[LANGUAGE_NONE][0]['value']:$moodle_user->lastname;
+    $moodle_user->email = $account->mail ? $account->mail:$moodle_user->email;
+    $moodle_user->city = $account->field_address[LANGUAGE_NONE][0]['locality'] ? $account->field_address[LANGUAGE_NONE][0]['locality']:$moodle_user->city;
+    $moodle_user->country = $account->field_address[LANGUAGE_NONE][0]['country'] ? $account->field_address[LANGUAGE_NONE][0]['country']:$moodle_user->country;
+    
+    $response = api_user_moodle_update_user($moodle_user);
+  } else {
+    $new_user = new stdClass();
+    $new_user->username = $account->name ? $account->name:'';
+    $new_user->idnumber = $account->uid ? $account->uid:0;
+    $new_user->firstname = $account->field_first_name[LANGUAGE_NONE][0]['value'] ? $account->field_first_name[LANGUAGE_NONE][0]['value']:'';
+    $new_user->lastname = $account->field_last_name[LANGUAGE_NONE][0]['value'] ? $account->field_last_name[LANGUAGE_NONE][0]['value']:'';
+    $new_user->email = $account->mail ? $account->mail:'';
+    $new_user->city = $account->field_address[LANGUAGE_NONE][0]['locality'] ? $account->field_address[LANGUAGE_NONE][0]['locality']:'';
+    $new_user->country = $account->field_address[LANGUAGE_NONE][0]['country'] ? $account->field_address[LANGUAGE_NONE][0]['country']:'';
+        
+    $response = api_user_moodle_create_user($new_user);
+  }
+}
+
+function api_user_moodle_get_moodle_users(){
+  $moodle_con = moodle_connector_connect();
+  if (!$moodle_con) {
+    return FALSE;
+  }
+  
+  $query = $moodle_con->select('user','u');
+  $query->condition('u.confirmed', '1', '=');
+  $query->condition('u.deleted', '0', '=');
+  $query->condition('u.auth', 'drupalservices', '=');
+  $query->fields('u', array('username','idnumber','firstname','lastname','email','city','country'));
+  $result = $query->execute()->fetchAll();
+  
+  return $result;
+}
+
+function api_user_moodle_get_user($username,$uid){
+  $moodle_con = moodle_connector_connect();
+  if (!$moodle_con) {
+    return FALSE;
+  }
+  
+  $query = $moodle_con->select('user','u');
+  $query->condition('u.username', $username, '=');
+  $query->condition('u.idnumber', $uid, '=');
+  $query->condition('u.auth', 'drupalservices', '=');
+  $query->fields('u', array('id','username','idnumber','firstname','lastname','email','city','country'));
+  $result = $query->execute()->fetchObject();
+  
+  return $result;
+}
+
+function api_user_moodle_update_user($user){
+  $moodle_con = moodle_connector_connect();
+  if (!$moodle_con) {
+    return FALSE;
+  }
+  
+  $result = $moodle_con->update('user')
+      ->fields(array(
+        'firstname' => $user->firstname,
+        'lastname' => $user->lastname,
+        'email' => $user->email,
+        'city' => $user->city,
+        'country' => $user->country
+      ))
+      ->condition('id', $user->id, '=')
+      ->condition('username', $user->username, '=')->execute();
+  
+  return $result;
+}
+
+function api_user_moodle_create_user($user){
+  $moodle_con = moodle_connector_connect();
+  if (!$moodle_con) {
+    return FALSE;
+  }
+  
+  $result = $moodle_con->insert('user')
+      ->fields(array('username', 'idnumber', 'auth','firstname','lastname','email','city','country','mnethostid','confirmed'))
+      ->values(array(
+        'username' => $user->username,
+        'idnumber' => $user->idnumber,
+        'auth' => 'drupalservices',
+        'firstname' => $user->firstname,
+        'lastname' => $user->lastname,
+        'email' => $user->email,
+        'city' => $user->city,
+        'country' => $user->country,
+        'mnethostid' => 1,
+        'confirmed' => 1,
+      ))->execute();
+  
+  return $result;
+}

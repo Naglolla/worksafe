@@ -1,0 +1,6 @@
+name = API Users
+description = API Users' custom functionality.
+package = API Custom
+version = VERSION
+core = 7.x
+files[] = inc/APIFeedsUserProcessor.inc

@@ -1,0 +1,76 @@
+.view-api-commerce-backoffice-user-orders,
+.view-tokens-list,
+.view-display-id-directory_search,
+.view-display-id-company_admin_user_import_search {
+
+  /* Pagination */
+  #pager-text {
+    display: inline;
+    float: right;
+    line-height: 60px;
+    margin-right: 30px;
+    @media @small-size {
+      display: none;
+    }
+  }
+  div.item-list {
+    float: right;
+    ul.pager {
+      border: 0;
+      background: none;
+      li, a, a:link {
+        font: @font-body-button;
+        line-height: 44px;
+        text-align: center;
+        color: @main-color-white;
+        border:0;
+      }
+      li {
+        height: 44px;
+        width: 44px;
+        padding: 8px;
+        margin: 5px;
+        background: @main-color-table; 
+        &.pager-first {
+          display: none;
+        }
+        &.pager-previous {
+          margin-left: 0;
+          a:before {
+            content: '';
+            height: 44px;
+            width: 44px;
+            background: url('@{images}/pag-prev.png') no-repeat center center;
+            display: block;
+          }
+        }
+        &.pager-item {
+
+        }
+        &.pager-current {
+          border-radius: 0;
+          background: @main-color-blue;
+        }
+        &.pager-next {
+          margin-right: 0;
+          position: initial;
+          a:before {
+            content: '';
+            height: 44px;
+            width: 44px;
+            background: url('@{images}/page-next.png') no-repeat center center;
+            display: block;
+          }
+        }
+        &.pager-last {
+          display: none;
+        }  
+        a {
+          background: none;
+          padding: 0;
+        }
+      }
+    }
+  }
+
+}

@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Features Services feature.
+ */
+
+include_once 'api_features_services.features.inc';

@@ -1,0 +1,10 @@
+#api-logs-filters-container .container-inline-date,
+#api-logs-filters-container .form-item-payment-method,
+#api-logs-filters-container .form-item-payment-status,
+#api-logs-filters-container .form-item-program {
+  float: left;
+  margin: 0px 10px;
+}
+.container-inline-date .date-padding {
+  padding: 0;
+}

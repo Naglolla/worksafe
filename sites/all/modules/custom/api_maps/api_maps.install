@@ -1,0 +1,145 @@
+<?php
+/**
+ * @file
+ * Install, update, and uninstall functions.
+ */
+
+/**
+ * Implements hook_enable().
+ */
+function api_maps_enable() {
+  // Configure Pathauto Entities module to allow pathauto for custom entities.
+  $available = variable_get('pathauto_entity_available_entity_types', array());
+  $available['us_state'] = 'us_state';
+  variable_set('pathauto_entity_available_entity_types', $available);
+  
+  // Set Pathauto Patter for US States Entity.
+  $pattern = 'us-state/[us_state:field_map_state_id]';
+  variable_set('pathauto_us_state_us_state_pattern', $pattern);
+  
+  // Create all US States entities.
+  api_maps_create_us_states();
+}
+
+/**
+ * Function to create all US States.
+ */
+function api_maps_create_us_states() {
+  $states_created = variable_get('api_maps_states_created', FALSE);
+  if (!$states_created) {
+    $states = array(
+      'AL' => 'Alabama',
+      'AK' => 'Alaska',
+      'AZ' => 'Arizona',
+      'AR' => 'Arkansas',
+      'CA' => 'California',
+      'CO' => 'Colorado',
+      'CT' => 'Connecticut',
+      'DE' => 'Delaware',
+      'DC' => 'District of Columbia',
+      'FL' => 'Florida',
+      'GA' => 'Georgia',
+      'HI' => 'Hawaii',
+      'ID' => 'Idaho',
+      'IL' => 'Illinois',
+      'IN' => 'Indiana',
+      'IA' => 'Iowa',
+      'KS' => 'Kansas',
+      'KY' => 'Kentucky',
+      'LA' => 'Louisiana',
+      'ME' => 'Maine',
+      'MD' => 'Maryland',
+      'MA' => 'Massachusetts',
+      'MI' => 'Michigan',
+      'MN' => 'Minnesota',
+      'MS' => 'Mississippi',
+      'MO' => 'Missouri',
+      'MT' => 'Montana',
+      'NE' => 'Nebraska',
+      'NV' => 'Nevada',
+      'NH' => 'New Hampshire',
+      'NJ' => 'New Jersey',
+      'NM' => 'New Mexico',
+      'NY' => 'New York',
+      'NC' => 'North Carolina',
+      'ND' => 'North Dakota',
+      'OH' => 'Ohio',
+      'OK' => 'Oklahoma',
+      'OR' => 'Oregon',
+      'PA' => 'Pennsylvania',
+      'PR' => 'Puerto Rico',
+      'RI' => 'Rhode Island',
+      'SC' => 'South Carolina',
+      'SD' => 'South Dakota',
+      'TN' => 'Tennessee',
+      'TX' => 'Texas',
+      'UT' => 'Utah',
+      'VT' => 'Vermont',
+      'VI' => 'Virgin Islands',
+      'VA' => 'Virginia',
+      'WA' => 'Washington',
+      'WV' => 'West Virginia',
+      'WI' => 'Wisconsin',
+      'WY' => 'Wyoming',
+    );
+    foreach ($states as $key => $state) {
+      $entity_type = 'us_state';
+      $entity = entity_create($entity_type, array('type' => 'us_state'));
+
+      $wrapper = entity_metadata_wrapper($entity_type, $entity);
+      $wrapper->field_title->set($state);
+      $wrapper->field_title = $state;
+
+      $state_id = $key;
+      $wrapper->field_state_id->set($state_id);
+      $wrapper->field_state_id = $state_id;
+
+      $state_map_id = 'US-' . $key;
+      $wrapper->field_map_state_id->set($state_map_id);
+      $wrapper->field_map_state_id = $state_map_id;
+      $wrapper->save();
+    }
+    variable_set('api_maps_states_created', TRUE);
+  }
+}
+
+/**
+ * Implements of hook_uninstall().
+ */
+function api_maps_uninstall() {
+  api_maps_delete_all_states();
+}
+
+function api_maps_delete_all_states() {
+  // Delete all US State.
+  $us_states_ids = db_query('SELECT id FROM eck_us_state');
+  foreach ($us_states_ids as $state_id) {
+    entity_delete('us_state', $state_id->id);
+  }
+  variable_del('api_maps_states_created');
+}
+
+/**
+ * Create all US States entities.
+ */
+function api_maps_update_7001() {
+  // Delete unnecessay fields.
+  field_delete_field('field_state_training_deadline');
+  field_delete_field('field_state_regulating_agency');
+  field_delete_field('field_state_agency_link');
+  
+  // Configure Pathauto Entities module to allow pathauto for custom entities.
+  $available = variable_get('pathauto_entity_available_entity_types', array());
+  $available['us_state'] = 'us_state';
+  variable_set('pathauto_entity_available_entity_types', $available);
+  
+  // Set Pathauto Patter for US States Entity.
+  $pattern = 'us-state/[us_state:field_map_state_id]';
+  variable_set('pathauto_us_state_us_state_pattern', $pattern);
+  
+  // Wipe all existing states.
+  api_maps_delete_all_states();
+  
+  // Create all US States entities.
+  api_maps_create_us_states();
+}

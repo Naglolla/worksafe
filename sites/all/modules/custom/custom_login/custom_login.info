@@ -1,0 +1,6 @@
+name = Custom Login
+description = Alow changes on some drupal variables in order to not block the user after x number of attemps.
+package = API Custom
+version = VERSION
+core = 7.x
+dependencies[] = login_destination

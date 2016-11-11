@@ -1,0 +1,11 @@
+name = API Massachusetts Report
+description = API Massachusetts Report
+package = API Custom
+version = VERSION
+core = 7.x
+dependencies[] = api_company_admin
+dependencies[] = api_custom
+dependencies[] = api_moodle
+dependencies[] = api_programs
+
+;files[] = api_massachusetts_report.pages.inc

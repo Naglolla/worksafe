@@ -1,0 +1,173 @@
+/* Order detail */
+.entity-commerce-order {
+  legend {
+    display: none;
+  }
+  fieldset {
+    border: 0;
+    .fieldset-wrapper {
+      width: 100%;
+      position: relative;
+    }
+  }
+  .content {
+    width: 90%;
+    margin: auto;
+    @media @small-size {
+      width: 100%;
+    }
+  }
+  #order-header {
+    background: @main-color-light !important;
+    padding: 40px 25px;
+    display: inline-block;
+    text-transform: capitalize;
+    label {
+      width: auto;
+      padding-right: 10px;
+    }
+    div {
+      display: block;
+    }
+    @media @small-size {
+      display: block;
+    }
+  }
+  table.views-table {
+    .long-space-table;
+  }
+  table.commerce-price-formatted-components {
+    td, td.odd {
+      background: @main-color-table !important;
+      white-space: nowrap;
+    }
+    @media @small-size {
+      width: 100%;
+    }
+  }
+  .print-button {
+    bottom: 0;
+    position: absolute;
+    right: 0;
+    height: 25px;
+    line-height: 25px;
+    @media @middle-size {
+      min-width: auto;
+    }
+    @media @small-size {
+      position: initial;
+      width: 100%;
+      display: block;
+      margin-top: 40px;
+      padding: 12px 0;
+      font-size: 18px;
+      font-weight: 500;
+    }
+  }
+  
+  // print
+  @media print {
+    table.views-table {
+      thead {
+        display: table-header-group;
+      }
+      tbody {
+        tr {
+          text-align: left;
+          display: table-row;
+          td {
+            display: table-cell;
+            .table-label {
+              display: none !important;
+            }
+            &:first-child {
+              padding-left: 15px !important;
+            }
+            &:last-child {
+              padding-right: 15px !important;
+              text-align: right !important;
+            }
+          }
+        }
+       
+      }
+    } 
+  }
+  
+}
+
+
+#commerce-checkout-form-review {
+  .commerce-credit-card-expiration {
+    select {
+      width: auto !important;
+      padding-right: 60px;
+    }
+  }
+}
+
+#edit-commerce-coupon-coupon-add {
+  margin-left: 30%;
+}
+
+
+/* Order History */
+.view-api-commerce-backoffice-user-orders {
+  .top-buttons {
+    margin-bottom: 35px;
+    text-align: right;
+    .export-csv-button {
+      margin-right: 10px;
+    }
+    .button.primary {
+      @media @small-size {
+        margin-bottom: 20px;
+        width: 100%;
+        padding-left: 0;
+        padding-right: 0;
+        font-size: 18px;
+        font-weight: 500;
+      }
+    }
+  }
+  li.views-row {
+    .views-field {
+      /*display: block;*/
+    }
+    > div.field, div.field div {
+      display: inline;
+    } 
+  }
+  td.views-field {
+    a {
+      display: block;
+    }
+  }
+  .courses-list {
+    padding-left: 28px;
+    ol {
+      margin-bottom: 0;
+    }
+  }
+  .views-label {
+    font-weight: 500;
+  }
+  
+  @media @small-size {
+    .views-field-order-number {
+      a {
+        display: inline !important;
+      }
+    }
+    .views-field-order-id > a{
+      &:first-child {
+        float: left;
+        margin-left: 30px;
+      }
+      &:last-child {
+        float: right;
+        margin-right: 30px;
+      }
+    }
+  }
+}

@@ -1,0 +1,74 @@
+<?php
+
+/**
+ * @file
+ *   API Logs module install/schema hooks.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function api_logs_schema() {
+  $schema = array();
+
+  $schema['api_logs'] = array(
+    'description' => 'Table for storing site specific logs',
+    'fields' => array(
+      'lid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique API Logs event ID.',
+      ), 
+      'date' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Unix timestamp of when event occurred.',
+      ),
+      'type' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Type of log message, for example "user" or "page not found."',
+      ),
+      'author' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The {users}.uid of the user who triggered the event.',
+      ),
+      'main_id' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Main ID of the entity created.',
+      ),
+      'message' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Message related to the record.',
+      ),
+      'variables' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => FALSE,
+        'description' => 'Information related to the record.',
+      ),
+    ),
+    'primary key' => array('lid'),
+  );
+  
+  return $schema;
+}
+
+/**
+ * Implements of hook_uninstall().
+ */
+function api_logs_uninstall() {
+  drupal_uninstall_schema('api_logs');
+}

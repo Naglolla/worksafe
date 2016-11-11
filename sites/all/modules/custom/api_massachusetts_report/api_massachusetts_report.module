@@ -1,0 +1,21 @@
+<?php
+/**
+ * @file Implements features regarding sales reports.
+ *
+ */
+
+/**
+ * Implements hook_menu()
+ */
+function api_massachusetts_report_menu() {
+  $items['admin/config/api/massachusetts-report'] = array(
+    'title' => 'Massachusetts Report',
+    'access arguments' => array('access administration pages'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_massachusetts_report_form'),
+    'file' => 'includes/api_massachusetts_report.pages.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}

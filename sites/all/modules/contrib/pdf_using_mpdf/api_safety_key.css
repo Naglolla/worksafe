@@ -1,0 +1,41 @@
+.safety-key .safety-key-front,
+.safety-key .safety-key-back {
+    width:300px;
+    height:175px;
+    border:1px dashed #ccc;
+    margin-right:0px;
+    float:left;
+    padding: 15px;
+}
+.safety-key .safety-key-front .key {
+	color: red;
+	display: table;
+	margin: 0 auto;
+	text-align: center;
+}
+
+.safety-key .safety-key-front .name {
+	border-bottom: 1px solid #000;
+	display: table;
+	margin: 0 auto;
+	width: 200px;
+	text-align: center;
+}
+.safety-key .safety-key-front .isuue-date {
+	display: table;
+    margin: 0 auto;
+    width: 200px;
+    text-align: center;
+}
+.safety-key .safety-key-front .isuue-label {
+	border-top: 1px solid #000;
+	display: table;
+    margin: 0 auto;
+    width: 200px;
+    text-align: center;
+}
+.safety-key .safety-key-front .program {
+	display: table;
+	margin: 0 auto;
+	text-align: center;
+}

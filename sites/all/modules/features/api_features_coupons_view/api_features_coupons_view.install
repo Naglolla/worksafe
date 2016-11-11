@@ -1,0 +1,24 @@
+<?php
+/**
+ * @file
+ * Install and uninstall code for API Features Coupons View.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function api_features_coupons_view_install() {
+	// Disable commerce coupon view.
+	$status = variable_get('views_defaults', array());
+	$status['commerce_coupons'] = TRUE;
+	variable_set('views_defaults', $status);
+}
+
+/**
+ * Disable commerce coupon view.
+ */
+function api_features_coupons_view_update_7000() {
+	$status = variable_get('views_defaults', array());
+	$status['commerce_coupons'] = TRUE;
+	variable_set('views_defaults', $status);
+}

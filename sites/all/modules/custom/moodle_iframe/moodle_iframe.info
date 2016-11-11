@@ -1,0 +1,5 @@
+name = Moodle Iframe
+description = Moodle Iframe container.
+package = API Custom
+version = VERSION
+core = 7.x

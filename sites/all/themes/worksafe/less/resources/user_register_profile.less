@@ -1,0 +1,456 @@
+@user-register-width: 70%;
+@user-register-responsive-middle: 90%;
+@user-register-responsive: 100%;
+@user-register-margin: 30%;
+
+body.page-user-register,
+body.page-user-edit,
+body.page-admin-people-create {
+  
+  form {
+    width: 90%;
+    margin: auto;
+    
+    @media @middle-size {
+      width: 100%;
+    }
+  }
+  
+  .group-register {
+    .fieldset-wrapper {
+      > div:last-child {
+        margin-bottom: 45px;
+      }
+    }
+  }
+  .group-account-info {
+    display: none;
+  }
+  input {
+    &:disabled {
+      font: @font-body-title-phone;
+      font-weight: 500;
+      color: @main-color-dark;
+      border: 0;
+      background: none;
+      @media @small-size {
+          text-align: center;
+      }
+    }
+  }  
+  // ajax information 
+  .data-information {
+    color: @main-color-soft;
+    font-weight: 300;
+    font: @font-body-info;
+    background: @main-color-light;
+    padding: 40px;
+    margin-bottom: 45px;
+    margin-left: @user-register-margin;
+    label {
+      font-weight: 300;
+      line-height: 30px;
+      width: 50%;
+      margin-right: 10px;
+      vertical-align: top;
+      @media @small-size {
+        width: 100%;
+        text-align: center;
+      }
+    }
+    div div {
+      display: inline-block;
+      @media @small-size {
+        display: block;
+        margin-bottom: 20px;
+        span {
+          margin-bottom: 0;
+        }
+      }
+    }
+    span {
+      vertical-align: -webkit-baseline-middle;
+      @media @small-size {
+        display: block;
+        width: 100%;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+    }
+    @media @middle-size {
+      margin-left: 0;
+      
+    }
+    @media @small-size {
+      padding: 15px 5px 5px 0;
+    }
+    
+  } 
+  .branch-details, .company-details {
+    width: 100%;
+  }
+  .form-type-textfield {
+    width: 100%;
+    margin-top: 0;
+  }
+  .form-item-user-create-option, .form-item-user-branch-create-option {
+    margin-top: 0;
+    &:not(.form-type-radio) {
+      top: -30px;
+      position: relative;
+    }
+    label {
+      font: @font-menu;
+      font-weight: 300;
+      color: @main-color-dark;
+      width: auto;
+      &[for=edit-user-create-option], 
+      &[for=edit-user-branch-create-option] {
+        margin: 0 10px 0 @user-register-margin + 2%;
+        @media @small-size {
+          margin: 0;
+        }
+      }
+      &.option {
+        cursor: pointer;
+      }
+    }
+    input[type=radio] {
+      display: none;
+    }
+    div {
+      display: inline;
+    }
+  }
+  #edit-field-address, 
+  #edit-field-local-company-address,
+  #edit-field-local-facility-address {
+    fieldset {
+      border-bottom: 0;
+    }
+    legend {
+      display: none;
+    }
+    .fieldset-wrapper, form-item {
+      width: 100%;
+    }
+  }
+  #edit-field-address-und-0 {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    .locality-block {
+      div {
+        width: 100%;
+        margin-top: 0;
+        margin-right: 0;
+      }
+    }
+  }
+  .form-item-field-tel-und-0-value,
+  .addressfield-container-inline,
+  .form-item-branch-use-company-hq-info {
+    margin-top: 0;
+  }
+  .form-wrapper.required,
+  .form-item-pass-pass2,
+  #edit-field-address-und-0--2 {
+    margin-bottom: 0;
+  }
+  .locality-block div:last-child  {
+    margin-bottom: 0;
+  }
+  .form-item-field-address-und-0-postal-code {
+    margin-bottom: 1em !important; 
+  }
+  
+  .form-type-password-confirm {
+    h3 {
+      display: none;
+    }
+    div.item-list {
+        float: none;
+    }
+    div.item-list ul li {
+        margin: 0;
+    }
+  }
+  
+  // remove li bullet
+  .password-suggestions.description {
+    //display: none !important;
+  }
+  
+  #edit-mimemail,
+  #edit-locale,
+  #edit-branch-use-company-hq-info,
+  .form-item-language {
+    display: none !important;
+  }
+  
+  // hide password information
+  .password-strength, .password-confirm:not(input) {
+    display: none;
+  }
+  
+  // footer
+  .form-item-field-accept-terms-and-condition-und {
+    width: @user-register-width;
+    margin: 60px auto 0 auto;
+    @media @small-size {
+      width: 100%;
+    }
+  }
+  
+  .group-mailing-preferences {
+    display: none;
+  }
+  
+  #edit-actions {
+    width: @user-register-width;
+    margin: 60px auto 0 auto;
+    .back-to-login {
+      display: inline;
+      margin-left: 15px;
+      a {
+        .cancel-button;
+      }
+      @media @small-size {
+        display: block;
+        text-align: center;
+        margin: 0;
+      }
+    }
+    @media @small-size {
+      width: @user-register-responsive;
+      input {
+        width: 100%;
+        margin-bottom: 50px;
+      }
+    }
+  }
+  #edit-captcha-response {
+    width: 100px !important;
+  }
+  #messages {
+    .error {
+      .item-list {
+        float: none;
+        li {
+          margin: 0;
+        }
+      }
+      ul {
+        list-style-type: none;
+      }
+    }
+  }
+  //hide all inputs descriptions
+  .description {
+    display: none;
+  }
+  
+  .form-item-field-accept-terms-and-condition-und {
+    label {
+      text-decoration: initial;
+    }   
+  }
+  
+  #edit-field-public-safety-key {
+    label span {
+      position: absolute;
+      margin-left: 5px;
+    }
+  }
+  
+  @media @small-size {
+    width: 100%;
+  }
+}
+
+/* Edit profile Only */
+div.my-profile-anchors {
+  text-align: center;
+  margin-bottom: 60px;
+  a {
+    display: inline-block;
+    margin: 5px;
+    padding: 15px;
+    height: auto;
+    font: @font-body-info;
+    font-weight: 700;
+    line-height: 25px;
+    
+   
+    @media @small-size {
+      font: @font-body-button;
+      font-weight: 700;
+      line-height: 40px;
+      margin: 10px auto;
+      padding: 8px 0;
+      width: 100%;
+    }
+  }
+  @media @middle-size {
+    margin-top: 30px;
+    margin-bottom: 30px;
+  }
+  @media @small-size {
+    margin-top: 0;
+    margin-bottom: 30px;
+  }
+}
+#user-profile-form {
+  .group-register {
+    label {
+      font-weight: 300;
+    }
+    .form-required {
+      display: none;
+    }
+  }
+  div.addressfield-container-inline > div.form-item {
+    margin-right: 0;
+    float: none;
+  }
+  .locality-block {
+    div:last-child {
+      margin-bottom: 0;
+    }
+  }
+  #field-tel-add-more-wrapper {
+    margin-top: 1em;
+  }
+  #edit-account {
+    position: relative;
+  }
+  #edit-fake-pass {
+      padding-top: 2px;
+  }
+  #change-pass {
+    position: absolute;
+    right: 0;
+    bottom: 12px;
+    &:link {
+      color: @main-color-dark
+    }
+    @media @small-size {
+      display: block;
+      position: initial;
+      text-align: center;
+      margin-bottom: 1em;
+    }
+  }
+  .form-item-user-change-company, .form-item-user-change-branch {
+    margin: 0;
+    &:not(.form-type-radio) {
+      top: -10px;
+      position: relative;
+    }
+    label {
+      font: @font-menu;
+      font-weight: 300;
+      color: @main-color-dark;
+      width: auto;
+      &[for=edit-user-change-company], &[for=edit-user-change-branch] {
+        margin: 0 10px 0 @user-register-margin + 2%;
+        @media @small-size {
+          margin: 0;
+        }
+      }
+      &.option {
+        cursor: pointer;
+      }
+    }
+    input[type=radio] {
+      display: none;
+    }
+    div {
+      display: inline;
+    }
+  }
+  .view-purchases {
+    .view-footer {
+      text-align: right;
+      a {
+        margin-right: 20px;
+        @media @small-size {
+          margin: 0 0 20px 0;
+          padding-left: 0;
+          padding-right: 0;
+          width: 100%;
+          overflow: hidden;
+        }
+        @media @middle-size {
+          margin: 0 0 20px 0;
+          padding: 0;
+          width: 100%;
+          overflow: hidden;
+          white-space: normal;
+          display: inline-block;
+        }
+      }
+      span {
+        @media @small-size {
+          width: 100%;
+          padding-left: 0;
+          padding-right: 0;
+        }
+        @media @middle-size {
+          width: 100%;
+          display: inline-block;
+          padding: 0;
+          white-space: normal;
+        }
+      }
+    }
+  }
+  .form-wrapper {
+    .view-empty {
+      @media @small-size {
+        text-align: center;
+      }
+    }
+  }
+}
+
+// forgot password
+body.page-user-password {
+  .zone-content-wrapper {
+    width: 90%;
+    margin: auto;
+    @media @small-size {
+      width: @user-register-responsive;
+    }
+  }
+  #user-pass {
+    border-bottom: 0 !important;
+    .form-item-name {
+      width: @user-register-width;
+      margin: 90px auto 0 auto;
+      padding-bottom: 35px;
+      label {
+        top: 14px;
+        @media @small-size {
+          top: 0;
+        }
+      }
+      @media @small-size {
+        padding-bottom: 15px;
+      }
+    }
+    #edit-actions {
+      border-top: 2px solid @main-color-dark;
+      input {
+        margin-top: 60px;
+        margin-left: 15%;
+        @media @small-size {
+          width: 100%;
+          margin-top: 30px;
+          margin-right: 0;
+          margin-left: 0;
+        }
+      }
+    }
+  }
+  
+}

@@ -1,0 +1,417 @@
+<?php
+/**
+ * @file
+ * Provides custom functionality for API Users.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function api_faq_contact_menu() {
+  $items['admin/config/api/faq-contact-page'] = array(
+    'title' => 'Help, FAQ & Contact Page',
+    'description' => 'Administer and Configure Help & FAQ page.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_faq_contact_configuration_form'),
+    'file' => 'api_faq_contact.admin.inc',
+    'access arguments' => array('access administration pages'),
+    'weight' => 1,
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['help-and-faq'] = array(
+    'title' => 'Help & FAQ',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_faq_contact_page_form'),
+    'access callback' => TRUE,
+  );
+  $items['api/%/upgrade'] = array(
+    'title' => 'Promote user to Company Admin',
+    'access callback' => 'api_faq_contact_access_upgrade_user',
+    'page callback' => 'api_faq_contact_upgrade_user_page',
+    'page arguments' => array(1),
+  );
+  return $items;
+}
+
+/**
+ * Implements Help & FAQ page form.
+ */
+function api_faq_contact_page_form() {
+  global $user;
+  $form = array();
+
+  // Fetch and Set Page Title.
+  $page_title = variable_get('api_help_and_faq_title', 'Help & FAQ');
+  drupal_set_title(t($page_title));
+
+  // Render Contact Form when enabled.
+  $contact_form_enabled = variable_get('api_faq_contact_form_status', FALSE);
+  if ($contact_form_enabled) {
+    // Add certain default non-editable field when user is logged in.
+    $user_logged_in = user_is_logged_in();
+    if ($user_logged_in) {
+      $full_profile = user_load($user->uid);
+      $first_name = field_get_items('user', $full_profile, 'field_first_name');
+      $first_name = (isset($first_name[0]['safe_value']))? $first_name[0]['safe_value'] : '';
+      $last_name = field_get_items('user', $full_profile, 'field_last_name');
+      $last_name = (isset($last_name[0]['safe_value']))? $last_name[0]['safe_value'] : '';
+      $company_name = field_get_items('user', $full_profile, 'field_company_name');
+      $company_name = (isset($company_name[0]['safe_value']))? $company_name[0]['safe_value'] : '';
+    }
+
+    // Select Fields Options (Companies and Programs).
+    $query_result = db_query("SELECT type, nid, title FROM node WHERE type = 'product_display'and status=1 ORDER BY title");
+    $fields = array('company');
+    foreach ($query_result as $row) {
+      $fields[$row->type][$row->nid] = $row->title;
+    }
+
+    // Contact header info text.
+    $form['help_and_faq_info_text'] = array(
+      '#type' => 'markup',
+      '#weight' => 0,
+      '#markup' => '<span>' . t('Complete the form below to send a question') . '</span>',
+    );
+    $form['first_name'] = array(
+      '#type' => 'textfield',
+      '#title' => t('First Name'),
+      '#required' => TRUE,
+    );
+    $form['last_name'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Last Name'),
+      '#required' => TRUE,
+    );
+    $form['email_address'] = array(
+      '#type' => 'textfield',
+      '#title' => t('E-mail'),
+      '#required' => TRUE,
+    );
+    $form['telephone'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Telephone'),
+    );
+    $form['company'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Company'),
+    );
+
+    // Programs Field Options
+    $program_field_options = array();
+    foreach ($fields['product_display'] as $row) {
+      $program_field_options[$row] = $row;
+    }
+    $form['program'] = array(
+      '#type' => 'select',
+      '#title' => t('Program'),
+      '#options' => $program_field_options,
+      '#required' => TRUE,
+    );
+
+    // Subject Field Options
+    $subject_options = array(
+      'Billing' => t('Billing'),
+      'Technical' => t('Technical'),
+      'General' => t('General'),
+    );
+    // Subject is displayed only for logged in users.
+    $form['subject'] = array(
+      '#type' => 'select',
+      '#title' => t('Subject'),
+      '#options' => $subject_options,
+      '#required' => TRUE,
+    );
+
+    // If logged in. Add some fields and default non-editable values.
+    if ($user_logged_in) {
+      $form['first_name']['#default_value'] = $first_name;
+      $form['last_name']['#default_value'] = $last_name;
+      $form['company']['#default_value'] = $company_name;
+      $form['email_address']['#default_value'] = $user->mail;
+
+      $form['first_name']['#disabled'] = $form['last_name']['#disabled'] = TRUE;
+      $form['company']['#disabled'] = $form['email_address']['#disabled'] = TRUE;
+
+      // Subject Field Option for logged in users.
+      $form['subject']['#options']['request_company_admin'] = t('Request Company Admin Status');
+    }
+    $form['message'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Message'),
+      '#attributes' => array('maxlength' => 400),
+      '#required' => TRUE,
+    );
+
+    $default_challenge = variable_get('captcha_default_challenge', '');
+    $form['my_captcha_element'] = array(
+      '#type' => 'captcha',
+      '#captcha_type' => $default_challenge,
+    );
+
+    $form['#validate'] = array('api_faq_contact_page_form_validate');
+    $form['#submit'] = array('api_faq_contact_page_form_submit');
+    $form = system_settings_form($form);
+    $form['actions']['submit']['#value'] = t('Send Message');
+    $form['actions']['cancel'] = array(
+       '#markup' => l(t('Cancel'), $destination),
+    );
+  }
+  // Fetch and Set Page Content.
+  $page_content = variable_get('api_help_and_faq_content', '');
+  if ($page_content) {
+    $form['help_and_faq_page_content'] = array(
+      '#type' => 'markup',
+      '#weight' => 101,
+      '#markup' => "<div class='contact-form-header'>" . t('FAQ') . "</div>" . t($page_content),
+    );
+  }
+
+  return $form;
+}
+
+/**
+ * Implements api_faq_contact_page_form validate function.
+ */
+function api_faq_contact_page_form_validate(&$form, $form_state) {
+  global $user;
+  $values = $form_state['values'];
+  if (!valid_email_address($values['email_address'])) {
+    form_set_error('email_address', t('Please enter a valid e-mail address.'));
+  }
+  // Handle Request Company Admin upgrade request.
+  if ($values['subject'] == 'request_company_admin' && in_array('company admin', $user->roles)) {
+    form_set_error('', t('Logged in user already is a Company Admin.'));
+  }
+}
+
+/**
+ * Implements api_faq_contact_page_form submit function.
+ */
+function api_faq_contact_page_form_submit(&$form, $form_state) {
+  $values = $form_state['values'];
+
+  $outgoing_mails_type = array('contact');
+  // Handle Upgrade to Company Admin Requests.
+  if (user_is_logged_in() && $values['subject'] == 'request_company_admin') {
+    // Upgrade to Company Admin Requests requires more mails to be sent.
+    $outgoing_mails_type[] = 'upgrade_request';
+    $outgoing_mails_type[] = 'upgrade_request_sent';
+  }
+  foreach ($outgoing_mails_type as $type) {
+    $content = api_faq_contact_get_mail_content($values, $type);
+    $message = drupal_mail('api_faq_contact', $type, $content['email_to'], $content['language'], $content['params'], $content['email_from']);
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter.
+ */
+function api_faq_contact_form_api_faq_contact_page_form_alter(&$form, $form_state) {
+  // Add submit function to clear default Drupal's successful message.
+  $form['#submit'][] = 'api_faq_contact_page_form_clear_messages_submit';
+}
+
+/**
+ * Contact Form submit function callback.
+ * Clear Drupal's default successful message.
+ */
+function api_faq_contact_page_form_clear_messages_submit(&$form, $form_state) {
+  // Hide default message.
+  $old = drupal_get_messages('status');
+  // And override with a custom one.
+  drupal_set_message(t('Thank You! Your message has been sent.'));
+}
+
+
+/**
+ * Access Callback for api/%/upgrade menu.
+ */
+function api_faq_contact_access_upgrade_user() {
+  global $user;
+  // Only Customer Support role can upgrade users to Company Admin.
+  if(in_array('customer support', $user->roles)) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Page Callback for api/%/upgrade menu.
+ * Upgrade user rol to Company Admin.
+ */
+function api_faq_contact_upgrade_user_page($user_uid) {
+  $user = user_load($user_uid);
+  $succesful = api_faq_contact_upgrade_user($user);
+  if ($succesful) {
+    api_faq_contact_upgrade_success_notify($user);
+  }
+  return array();
+}
+
+/**
+ * Function to upgrade a user to Company Admin (Role).
+ *
+ * @param object $user User.
+ */
+function api_faq_contact_upgrade_user($user) {
+  $succesful = FALSE;
+  if (!isset($user->uid)) {
+    form_set_error('', t('User ID does not exist. Please verify and try again. If problem persist, please contact the site administrator.'));
+  } elseif (in_array('company admin', $user->roles)) {
+    drupal_set_message(t('User <b>"@username"</b> already is a Company Admin.', array('@username' => $user->name)));
+  } else {
+    $role = user_role_load_by_name('company admin');
+    if (isset($role->rid)) {
+      $roles_updated = $user->roles;
+      $roles_updated[$role->rid] = 'company admin';
+      user_save($user, array('roles' => $roles_updated));
+      drupal_set_message(t('User <b>"@username"</b> promote to Company Admin.',array('@username' => $user->name)));
+      $succesful = TRUE;
+    } else {
+      form_set_error('', t('Role information not found. If the issue persist, please contact the site administrator.'));
+    }
+  }
+  return $succesful;
+}
+
+/**
+ * Function to proper users about Company Admin upgrade.
+ *
+ * @param object $user User.
+ */
+function api_faq_contact_upgrade_success_notify($user) {
+  $content = array();
+  $content['language'] = language_default();
+  $content['email_from'] = variable_get('api_faq_contact_contact_email', '');
+
+  $mails = array();
+  // Get all company admins for the company.
+  $user_company = _get_user_company($user->uid);
+  // At this point, ser upgraded is already a company admin. Thus, his id is in the company_admins array.
+  $admin_ids = _get_company_admins($user_company);
+  foreach ($admin_ids as $admin_id) {
+    $company_admin = user_load($admin_id);
+    $mails[] = $company_admin->mail;
+  }
+
+  // Fetch user's information.
+  $user_full = user_load($user->uid);
+  $first_name = field_get_items('user', $user_full, 'field_first_name');
+  $last_name = field_get_items('user', $user_full, 'field_last_name');
+  $company_name = field_get_items('user', $user_full, 'field_company_name');
+  // Build body content.
+  $body = "The user <b>{$first_name[0]['safe_value']} {$last_name[0]['safe_value']}</b> " .
+          "has requested to be Company Admin of <b>{$company_name[0]['safe_value']}</b>.<br>" .
+          "The request has been <b>approved</b>.<br>" .
+          "In case of any clarification needed, please contact Help Desk";
+  // Mail subject.
+  $subject = t('THANK YOU. The request for granting Company Admin rights to the user has been approved.');
+  $content['params'] = array(
+    'headers' => array(
+      'MIME-Version' => '1.0',
+      'Content-Type' => 'text/html; charset=UTF-8; format=flowed',
+      'Content-Transfer-Encoding' => '8Bit',
+      'X-Mailer' => 'Drupal'
+    ),
+    'subject' => $subject,
+    'message' => $body,
+  );
+
+  // Notify new company admin and all other Company Admins (of that same company) about new upgrade.
+  foreach ($mails as $mail) {
+    $message = drupal_mail('api_faq_contact', 'notify_upgrade', $mail, $content['language'], $content['params'], $content['email_from']);
+  }
+  drupal_set_message(t('An e-mail has been sent to notify the user about the new role.'));
+  drupal_set_message(t('An e-mail has been sent to <b>"@company"</b> Company Admins to notify about the new Company Admin user.',
+                    array('@company' => $company_name[0]['safe_value']))
+  );
+}
+
+/**
+ * Function to get e-mail information.
+ */
+function api_faq_contact_get_mail_content($values, $mail_type) {
+  global $user;
+
+  $content = array();
+  $content['language'] = language_default();
+
+  // Build proper mail content.
+  switch ($mail_type) {
+    case 'contact':
+      // Fetch e-mail address.
+      $email_to = variable_get('api_faq_contact_contact_email', '');
+      // Build body content.
+      $body = "@Title=" . $values['message'] . " <br> ";
+      $body .= "@Custom_4=" . $values['email_address'] . " <br> ";
+      $body .= "@Custom_1=" . $values['first_name'] . " <br> ";
+      $body .= "@Custom_2=" . $values['last_name'] . " <br> ";
+      $body .= "@Custom_3=" . $values['telephone'] . " <br> ";
+      $body .= "@Custom_6=" . $values['company'] . " <br> ";
+      $body .= "@Custom_7=" . $values['program'] . " <br> ";
+      $body .= "@Category=" . $values['subject'] . " <br> ";
+      // Mail subject.
+      if (isset($values['subject'])) {
+        if ($values['subject'] == 'request_company_admin') {
+          $values['subject'] = 'Request Company Admin';
+        }
+        $subject = $values['subject'] . ' - ' . t('New Request');
+      } else {
+        $subject = t('New Request');
+      }
+      break;
+    case 'upgrade_request':
+      // Fetch user's information.
+      $user_full = user_load($user->uid);
+      $first_name = field_get_items('user', $user_full, 'field_first_name');
+      $last_name = field_get_items('user', $user_full, 'field_last_name');
+      $company_name = field_get_items('user', $user_full, 'field_company_name');
+      // Fetch Customer's support e-mail address.
+      $email_to = variable_get('api_faq_contact_customer_support_email', '');
+      // Build body content.
+      $body = t("A logged in user requests to be a Company Admin") . " <br> ";
+      $body .= "Username: " . $user->name . " <br> ";
+      $body .= "First Name: " . $first_name[0]['safe_value'] . " <br> ";
+      $body .= "Last Name: " . $last_name[0]['safe_value'] . " <br> ";
+      $body .= "Company: " . $company_name[0]['safe_value'] . " <br> ";
+      // Mail subject.
+      $subject = t('Request company admin status');
+      break;
+    case 'upgrade_request_sent':
+      // User that submitted form should recieve a request sent notification from API.
+      $values['email_address'] = 'doNotReply@api.com';
+      // Fetch user's e-mail address.
+      $email_to = $user->mail;
+      // Build body content.
+      $body = t('Message: ') . $values['message'] . " <br>";
+      $body .= t("A customer support representative will respond to you within 24 hours.");
+      // Mail subject.
+      $subject = t('THANK YOU. Your request has been sent to API WorkSafe Customer Support.');
+      break;
+  }
+
+  $content['email_to'] = $email_to;
+  $content['params'] = array(
+    'headers' => array(
+      'MIME-Version' => '1.0',
+      'Content-Type' => 'text/html; charset=UTF-8; format=flowed',
+      'Content-Transfer-Encoding' => '8Bit',
+      'X-Mailer' => 'Drupal'
+    ),
+    'subject' => $subject,
+    'message' => $body,
+    'mail_type' => $mail_type,
+  );
+  $content['email_from'] = $values['email_address'];
+
+  return $content;
+}
+
+/**
+ * Implements hook_mail().
+ */
+function api_faq_contact_mail($key, &$message, $params) {
+  $message['headers'] = array_merge($message['headers'], $params['headers']);
+  $message['subject'] = $params['subject'];
+  $message['body'][] = $params['message'];
+}

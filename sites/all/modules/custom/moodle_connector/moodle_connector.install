@@ -1,0 +1,21 @@
+<?php
+
+/**
+ * @file
+ * Install and uninstall code for Moodle Connector.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function moodle_connector_install() {
+  global $base_url;
+  variable_set('moodle_connector_url', $base_url . '/eplatform');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function moodle_connector_uninstall() {
+  variable_del('moodle_connector_url');
+}

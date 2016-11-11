@@ -1,0 +1,96 @@
+#footer-link {
+  margin-top: 75px;
+  text-align: center;
+  .information {
+    cursor: pointer;
+    max-width: 260px;
+    margin: auto;
+    .title {
+      text-transform: uppercase;
+      font: @font-body-title;
+      font-weight: 300;
+      margin-bottom: 30px;
+      color: @main-color-dark;
+      @media @small-size {
+        margin: 5px 0;
+        font: @font-body-title-phone;
+        font-weight: 300;
+      }
+      @media @middle-size {
+        margin: 5px 0;
+        font: @font-body-title-phone;
+        font-weight: 300;
+      }
+    }
+    .sub-title {
+      font: @font-body;
+      font-weight: 300;
+      color: @main-color-soft;
+      @media @small-size {
+        font: @font-body-phone;
+        font-weight: 100;
+      }
+      @media @middle-size {
+        font: @font-body-phone;
+        font-weight: 100;
+      }
+    }
+    @media @small-size {
+      margin-left: 105px;
+    }
+  }
+  .logo {
+    height: 141px;
+    margin: 20px 0 38px 0;
+    &.pin {
+      background: url("@{images}/pin.png") no-repeat center;
+    }
+    &.key {
+      background: url("@{images}/key.png") no-repeat center;
+    }
+    &.token {
+      background: url("@{images}/token.png") no-repeat center;
+    }
+    @media @middle-size {
+      width: 100px;
+      height: 100px;
+      margin-left: auto;
+      margin-right: auto;
+      background-size: cover !important;
+    }
+    @media @small-size {
+      width: 90px;
+      height: 90px;
+      margin: 0;
+      background-size: cover !important;
+      float: left;
+    }
+  }
+  .directory:hover {
+    .logo.pin {
+      background: url("@{images}/pin_hover.png") no-repeat center;
+    }
+  }
+  .safety-key:hover {
+    .logo.key {
+        background: url("@{images}/key_hover.png") no-repeat center;
+      }
+  }
+  .token:hover {
+    .logo.token {
+        background: url("@{images}/token_hover.png") no-repeat center;
+      }
+  }
+  .content {
+    @media @small-size {
+      min-height: 100px;
+    }
+  }
+  a:hover, a:visited, a:link, a:active {
+    text-decoration: none;
+  }
+  @media @small-size {
+    margin: 50px 10px;
+    text-align: left;
+  }
+}

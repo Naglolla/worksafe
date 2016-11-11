@@ -1,0 +1,157 @@
+body.page-admin-people-api {
+  
+  h1.title {
+    @media @middle-size {
+      font-size: 90px;
+      line-height: 90px;
+    }
+  }
+  
+  .region-content {
+    
+  }
+  
+  .block-system-main {
+    width: 95%;
+    margin: auto;
+    
+    #api-users-company-users-list {
+      > div {
+        input {
+          padding: 20px;
+        }
+        #edit-filter {
+          margin: 20px 10px 50px 1%;
+          @media @middle-size {
+            margin: 30px 0 10px 0;
+            width: 80%;
+            margin-left: 10%;
+          }
+          @media @small-size {
+            width: 100%;
+            margin-left: 0;
+          }
+        }
+        #edit-export, #edit-create-user {
+          margin: 20px 10px 50px 0;
+          @media @middle-size {
+            margin: 10px 0;
+            width: 80%;
+            margin-left: 10%;
+          }
+          @media @small-size {
+            width: 100%;
+            margin-left: 0;
+          }
+        }
+        #edit-pre-registration-user {
+          margin: 20px 0 50px 0;
+          @media @middle-size {
+            margin: 10px 0 30px 0;
+            width: 80%;
+            margin-left: 10%;
+          }
+          @media @small-size {
+            width: 100%;
+            margin-left: 0;
+          }
+        }
+        table {
+          ul {
+            list-style-type: none;
+            text-align: center;
+          }
+        }
+        div {
+          width: 48%;
+          margin-left: 1%;
+          margin-right: 0;
+          display: inline-block;
+          label {
+            width: 30%;
+            display: inline-block;
+            vertical-align: middle;
+            text-transform: capitalize;
+             @media @small-size {
+              width: 100%;
+            }
+          }
+          input, select {
+            width: 68%;
+            @media @small-size {
+              width: 90%;
+            }
+          }
+          @media @middle-size {           
+            width: 80%;
+            margin-left: 10%;
+          }
+          @media @small-size {
+            margin-left: 0;
+            text-align: center;
+            width: 100%;
+          }
+        }
+      }
+    }
+    
+    #views-exposed-form-api-users-page-1 .views-exposed-widgets {
+      > div {
+        width: 48%;
+        margin-left: 1%;
+        margin-right: 0;
+        padding: 0;
+        display: inline-block;
+        margin-top: 1em;
+        margin-bottom: 1em;
+        label {
+          width: 30%;
+          display: inline-block;
+          text-transform: capitalize;
+        }
+        div.views-widget {
+          display: inline-block;
+          width: 68%;
+          @media @small-size {
+            width: 90%;
+          }
+        }
+        input, select {
+          width: 100%
+        }
+        #edit-submit-api-users {
+          margin-top: 0;
+          width: auto;
+          @media @small-size {
+           width: 100%;
+          }
+        }
+        @media @small-size {
+          margin-left: 0;
+          text-align: center;
+          width: 100%;
+        }
+      }
+    }
+    
+    @media @small-size {
+      width: 100%;
+    }
+  }
+}
+
+// Company admin create new account
+body.page-admin-people-create {
+  #edit-status {
+    width: 67% !important;
+    display: inline-block;
+    div.form-item {
+      display: inline;
+      margin-right: 20px;
+    }
+    @media @small-size {
+      display: block;
+      width: 100% !important;
+    }
+  }
+}

@@ -1,0 +1,122 @@
+body.page-admin-config-api-sales-report {
+  
+  fieldset .fieldset-wrapper {
+    width: 90%;
+    @media @small-size {
+      width: 100%;
+    }
+  }
+
+  #statistics-container {
+    padding: 20px;
+    margin-bottom: 50px;
+    
+    .summary-report {
+    
+      .stats {
+        float: left;
+        padding-left: 5%;
+        width: 30%;
+        box-sizing: initial;
+        -webkit-box-sizing: initial;
+        -moz-box-sizing: initial;
+        .field {
+          .field-label {
+            display: inline;
+            margin-right: 10px;
+          }
+          .field-items {
+            display: inline-block;
+          }
+        }
+        &:first-child {
+          padding-left: 0;
+        }
+
+        @media @small-size {
+          padding: 0;
+          width: 100%;
+          float: none;
+          margin-bottom: 50px;
+          text-align: center;
+        }
+      }
+      
+      .info {
+        width: 100%;
+        float: left;
+        margin-top: 40px;
+        @media @small-size {
+          margin-top: 0;
+        }
+      }
+    }
+  }
+  
+  #report-filters-container {
+    border-bottom: 0;
+    .fieldset-wrapper {
+      width: 70%;
+      margin: auto;
+      
+      .form-type-date-popup {
+        width: 100%;
+        margin-right: 0;
+        
+        label {
+          width: 30%;
+          display: inline-block;
+          line-height: 52px;
+          vertical-align: top;
+          @media @small-size {
+            line-height: initial;
+            width: auto;
+          }
+        }
+        .date-padding {
+          width: 67%;
+          padding: 0;
+          float: none;
+          display: inline-block;
+          .form-type-textfield {
+            float: none;
+            display: inline;
+            input {
+              width: 100% !important;
+            }
+            .description {
+              margin-left: 0;
+            }
+          }
+          @media @small-size {
+            width: 100%;
+          }
+        }
+      }
+      
+      @media @small-size {
+        width: 100%;
+      }
+    }
+    @media @small-size {
+      margin-bottom: 0;
+    }
+  }
+
+  #api-sales-report-page {
+    #edit-filter, 
+    #edit-export {
+      margin-bottom: 20px;
+      @media @small-size {
+        width: 100%;
+      }
+    }
+    #edit-filter {
+      margin-right: 20px;
+      @media @small-size {
+        margin-right: 0;
+      }
+    }
+  }
+  
+}

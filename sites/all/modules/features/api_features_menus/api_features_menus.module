@@ -1,0 +1,23 @@
+<?php
+/**
+ * Implements hook_menu().
+ *
+ */
+function api_features_menus_menu() {
+	$items['my-account'] = array(
+		'title' => 'My Account',
+    'access callback' => 'user_is_logged_in',
+    'page callback' => 'my_account_page',
+    'type' => MENU_NORMAL_ITEM,
+	);
+  
+  return $items;
+}
+
+/**
+ * This is just a wrapper to create a link to user page only shown for authenticated users.
+ */
+function my_account_page() {
+  global $user;
+  drupal_goto("user/$user->uid/edit");
+}

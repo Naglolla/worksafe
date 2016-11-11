@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Site Configurations feature.
+ */
+
+include_once 'api_site_configurations.features.inc';

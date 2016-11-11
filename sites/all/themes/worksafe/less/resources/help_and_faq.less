@@ -1,0 +1,118 @@
+div.help-faq-page {
+  #region-content div.content {
+    width: 90%;
+    margin: auto;
+    .fqa-content {
+      margin: 30px auto;
+      color: @main-color-dark;
+      border: 2px solid @main-color-dark;
+      .border-radius(6px);
+      .span-title {
+        display:block;
+        font: @font-body-button;
+        font-weight: 500;
+        padding: 20px 30px 0 30px;
+        @media @small-size {
+          padding: 10px 10px 0 10px;
+        }
+      }
+      .span-content {
+        display:block;
+        font: @font-body-info;
+        font-weight: 500;
+        padding: 0 30px 20px 30px;
+        color: lighten(@main-color-dark, 10%);
+        @media @small-size {
+          padding: 0 10px 10px 10px;
+        }
+      }
+      @media @small-size {
+        width: 100%;
+      }
+    }
+    .contact-form-header {
+      font: @font-title;
+      color: @main-color-orange;
+      text-transform: uppercase;
+      letter-spacing: -2px;
+      text-align: center;
+      margin-top: 50px;
+      padding-top: 50px;
+      border-top: 2px solid @main-color-dark;
+      @media @small-size {
+        font-size: 90px;
+        line-height: 90px;
+        margin-top: 50px;
+      }
+    }
+    @media @small-size {
+      width: 100%;
+    }
+  }
+}
+// contact form
+#api-faq-contact-page-form {
+  width: 90%;
+  margin: auto;
+  border-bottom: 0 !important;
+  .form-item {
+    width: 70%;
+    margin-left: auto;
+    margin-right: auto;
+    @media @middle-size {
+      width: 90%;
+    }
+    @media @small-size {
+      width: 100%;
+    }
+  }
+  .form-type-textarea {
+    label {
+      vertical-align: top;
+    }
+  }
+  #edit-captcha-response {
+    width: 100px !important;
+  }
+  .captcha {
+    padding-bottom: 15px;
+  }
+  #edit-actions {
+    width: 70%;
+    margin: 0 auto;
+    @media @small-size {
+      width: auto;
+      input {
+        width: 100%;
+      }
+    }
+  }
+  #edit-actions {
+    a {
+      font: @font-body-table;
+      font-weight: 500;
+      margin-left: 30px;
+      @media @small-size {
+        display: block;
+        text-align: center;
+        margin-top: 50px;
+        margin-left: 0;
+      }
+    }
+  }
+  // title
+  > div {
+    > span {
+      font: @font-body-sub-title;
+      font-weight: 300;
+      color: @main-color-dark;
+      text-align: center;
+      display: block;
+      margin: 70px 0 50px 0;
+      @media @small-size {
+        font: @font-body-sub-title;
+        margin: 35px 0 25px 0;
+      }
+    }
+  }
+}

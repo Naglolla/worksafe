@@ -1,0 +1,16 @@
+name = API Features Rules
+description = API Features  Rules Configuration
+core = 7.x
+package = Features
+dependencies[] = commerce_coupon
+dependencies[] = entity
+dependencies[] = php
+dependencies[] = rules
+features[features_api][] = api:1
+features[rules_config][] = commerce_payment_paypal_wpp
+features[rules_config][] = commerce_coupon_fixed_amount_calculate_amount
+features[rules_config][] = commerce_coupon_pct_percent_amount
+features[rules_config][] = commerce_coupon_pct_apply_pct_coupons_to_line_item
+features[rules_config][] = commerce_coupon_coupon_validation_check_company
+features[rules_config][] = commerce_coupon_fixed_amount_calculate_amount_max
+features[rules_config][] = commerce_coupon_pct_percent_amount_max

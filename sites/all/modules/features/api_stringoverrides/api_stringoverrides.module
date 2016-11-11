@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Stringoverrides feature.
+ */
+
+include_once 'api_stringoverrides.features.inc';

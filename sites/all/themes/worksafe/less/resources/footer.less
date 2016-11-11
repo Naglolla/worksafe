@@ -1,0 +1,79 @@
+.zone-wrapper.zone-footer-wrapper {
+  min-height: 95px;
+  background-color: @main-color-light;
+  border-bottom: 5px solid @main-color-dark;
+}
+#section-footer {
+  margin-top: 100px;
+  @media @small-size {
+    margin-top: 0;
+  }
+  
+  /* API logo section */
+  #region-footer-first {
+    p {
+      margin-bottom: 0;
+    }
+    #footer-api-image {
+      width: 292px;
+      height: 95px;
+      display: block;
+      background: url("@{images}/api-footer-logo.png") no-repeat center;
+      @media @middle-size {
+        display: none;
+      }
+    }  
+  }
+  
+  /* Social link section */
+  #region-footer-second {
+    #block-social-media-links-social-media-links .content {
+      text-align: center;
+      margin-top: 35px;
+      .social-media-links {
+        li {
+          padding: 0 10px;
+        }
+      }
+      @media @middle-size {
+        margin-top: 5px;
+      }
+      @media @small-size {
+        margin-top: 20px;
+      }
+    }
+    @media @middle-size {
+      width: 100%;
+    }
+    @media @small-size {
+      margin: 0;
+      padding-top: 1px;
+    }
+  }
+  
+  /* Copyright section */
+  #region-footer-third {
+    text-align: right;
+    padding: 35px 0 0 0;
+    #footer-copyright {
+      font: @font-footer-small;
+      color: @main-color-dark;
+      line-height: 12px;
+      font-weight: 300;
+      a {
+        font: @font-footer-small;
+        color: @main-color-dark;
+        font-weight: 300;
+      }
+    }
+    @media @middle-size {
+      text-align: center;
+      width: 100%;
+      padding-bottom: 20px;
+    }
+    @media @small-size {
+      padding: 0;
+      margin: 20px 0;
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Regulatory Questions feature.
+ */
+
+include_once 'api_regulatory_questions.features.inc';

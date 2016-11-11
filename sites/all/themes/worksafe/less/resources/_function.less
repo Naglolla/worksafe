@@ -1,0 +1,39 @@
+.border-radius(@radius) {
+  -webkit-border-radius: @radius;
+     -moz-border-radius: @radius;
+          border-radius: @radius;
+}
+
+.box-shadow(@shadow) {
+  -webkit-box-shadow: @shadow;
+     -moz-box-shadow: @shadow;
+          box-shadow: @shadow;
+}
+
+.transition(@time, @attr: all) {
+  -webkit-transition: @attr @time;
+     -moz-transition: @attr @time;
+          transition: @attr @time;
+}
+
+.font-face(@name, @url, @weight: normal, @style: normal, @format: opentype) {
+  @font-face {
+    font-family: @name;
+    src: url(@url) format("@{format}");
+    font-weight: @weight;
+    font-style: @style;
+  }
+}
+
+.box-sizing(@type) {
+  -webkit-box-sizing: @type; 
+     -moz-box-sizing: @type;    
+          box-sizing: @type; 
+}
+
+.rotate(@deg) {
+  -webkit-transform: rotate(@deg);
+     -moz-transform: rotate(@deg);
+      -ms-transform: rotate(@deg);
+          transform: rotate(@deg);
+}

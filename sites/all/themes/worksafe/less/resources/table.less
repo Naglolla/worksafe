@@ -1,0 +1,190 @@
+table.views-table, 
+table#mycourses-table,
+table#mycourses-availables-table,
+table.sticky-header {
+  border: 2px solid @main-color-dark;
+  thead {
+    text-transform: capitalize;
+    th, th.active {
+      background: @main-color-light;
+      border: 0;
+      font: @font-body-table;
+      font-weight: 700;
+      color: @main-color-dark;
+      padding: 25px 5px;
+      &:first-child {
+        padding-left: 25px;
+        @media @small-size {
+          padding-left: 15px;
+        }
+      }
+      &:last-child {
+        padding-right: 25px;
+        @media @small-size {
+          padding-right: 15px;
+        }
+      }
+      a, a:link {
+        font: @font-body-button;
+        font-weight: 700;
+      }
+    }
+    th.active img{
+      margin-bottom: 6px;
+    }
+  }
+  tr {
+    td:first-child {
+      padding-left: 25px;
+      @media @small-size {
+        padding-left: 15px;
+      }
+    }
+    td:last-child {
+      padding-right: 25px;
+
+      @media @small-size {
+        padding-right: 15px;
+      }
+    }
+  }
+  tr, tr.even, tr.odd, td, td.active {
+    color: @main-color-dark;
+    font: @font-body-table;
+    background-color: #fff;
+    background: none;
+    border: 0;
+    border-bottom: 0;
+    padding: 30px 5px;
+    &:hover {
+      background-color: #fff !important;
+    }
+  }
+  tr:hover > td.active {
+    background-color: #fff !important;
+  }
+  .delete-line-item {
+    background: none !important;
+    border: 0;
+    text-decoration: underline;
+    color: @main-color-dark;
+    font: @font-body-table;
+    font-weight: 500;
+    &:hover {
+      color: @main-color-orange;
+    }
+  }
+  @media @small-size {
+    thead {
+      display: none;
+    }
+    tbody {
+      tr {
+        text-align: center;
+        display: block;
+        td {
+          text-align: center;
+          display: block;
+          padding: 10px 0 !important;
+        }
+        &:nth-of-type(2n) {
+          background-color: @main-color-light;
+        }
+      }
+    }
+  }
+  .table-label {
+    display: none;
+    @media @small-size {
+      display: block;
+    }
+  }
+}
+
+table.commerce-price-formatted-components {
+  border: 0;
+  background: @main-color-light;
+
+  tr.odd td, tr.even td {
+    background: none;
+    font: @font-body-button;
+    font-weight: 700;
+    color: @main-color-dark;
+    padding: 20px 20px;
+  }
+  tr.even, tr.odd {
+    border: 0;
+  }
+}
+
+table.checkout-review {
+  border: 0;
+  tbody {
+    border: 0;
+    tr {
+      background: none;
+      border: 0;
+    }
+    tr.even td {
+      background: none;
+    }
+  }
+}
+
+table#mycourses-table {
+  border-left: 10px solid @main-color-orange;
+  span.module {
+    font-weight: 500;
+  }
+  @media @small-size {
+    border-left: 2px solid @main-color-dark;
+    border-top: 5px solid @main-color-orange;
+    thead {
+      display: none;
+    }
+    tbody {
+      tr {
+        text-align: center;
+        display: block;
+        td {
+          display: block;
+          padding: 10px;
+        }
+        &:nth-of-type(2n) {
+          background-color: @main-color-light;
+        }
+      }
+    }
+  }
+}
+table#mycourses-availables-table {
+  
+}
+table.sticky-header {
+  border: 2px solid @main-color-dark;
+  border-bottom: 0;
+  thead {
+    th {
+      border-bottom: 0;
+    }
+  }
+  @media @small-size {
+    display: none !important;
+  }
+}
+
+/* Custom long space table */
+.long-space-table {
+  th.views-field:not(:first-child) {
+    padding-left: 10px;
+  }
+  th.views-field:not(:last-child) {
+    padding-right: 10px;
+  }
+  td.views-field:not(:first-child) {
+    padding-left: 10px;
+  }
+  td.views-field:not(:last-child) {
+    padding-right: 10px;
+  }
+}

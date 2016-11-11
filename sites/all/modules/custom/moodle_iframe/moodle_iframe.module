@@ -1,0 +1,64 @@
+<?php
+/**
+ * @file
+ * Code for the Moodle iframe feature.
+ */
+
+define('MOODLE_IFRAME_PREFIX','eplatform');
+
+/**
+ * Implements hook_menu().
+ */
+function moodle_iframe_menu() {
+  $items['eplatform/%'] = array(
+    'page callback'    => 'moodle_iframe_page',
+    //'access callback' => TRUE,
+    'access callback' => 'user_is_logged_in',  
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/config/moodle/moodle_iframe'] = array(
+    'title'            => 'Moodle Iframe',
+    'description'      => 'Set Moodle Iframe settings.',
+    'page callback'    => 'drupal_get_form',
+    'page arguments'   => array('moodle_iframe_admin_settings'),
+    'access arguments' => array('administer moodle iframe'),
+    'file'             => 'moodle_iframe.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function moodle_iframe_permission() {
+  return array(
+    'administer moodle iframe' => array(
+      'title' => t('Administer Moodle Iframe'),
+      'description' => t('Set Moodle Iframe Settings'),
+    ),
+  );
+}
+
+function moodle_iframe_page() {
+
+  drupal_add_js(drupal_get_path('module', 'moodle_iframe') .'/js/iframeResizer.min.js',array('scope' => 'footer', 'weight' => 5));
+  drupal_add_js(drupal_get_path('module', 'moodle_iframe') .'/iframe.js',array('scope' => 'footer', 'weight' => 6));
+
+  // Get arguments
+  $arguments = explode('/',$_SERVER['REQUEST_URI']);
+  array_shift($arguments); // remove empty value
+  array_shift($arguments); // remove '/eplatform'
+  $url = join('/',$arguments);
+  
+  // Get Moodle main URL
+  $moodle_iframe_url = variable_get('moodle_iframe_url','');
+  
+  return '<iframe src="' . $moodle_iframe_url . '/' . $url . '" width="100%" class="autoresize scrolling="no""></iframe>';
+}
+
+/**
+ * Implements hook_username_alter().
+ */
+function moodle_iframe_username_alter(&$name, $account) {
+  $name = $account->name;
+}

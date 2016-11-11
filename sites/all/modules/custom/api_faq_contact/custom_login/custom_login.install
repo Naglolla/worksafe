@@ -1,0 +1,102 @@
+<?php
+
+/**
+ * Add initial configuration to login_destination module
+ * to redirect user to prev page after login
+ */
+function custom_login_insert_rule() {
+  db_insert('login_destination')->fields(array(
+    'triggers' => 'a:1:{s:5:"login";s:5:"login";}',
+    'roles' => 'a:0:{}',
+    'pages_type' => 0,
+    'pages' => 'user/*',
+    'destination_type' => 0,
+    'destination' => '<current>',
+    'weight' => 0
+  ))->execute();
+  db_insert('login_destination')->fields(array(
+    'triggers' => 'a:1:{s:6:"logout";s:6:"logout";}',
+    'roles' => 'a:0:{}',
+    'pages_type' => 0,
+    'pages' => '',
+    'destination_type' => 0,
+    'destination' => '<front>',
+    'weight' => 0
+  ))->execute();
+  db_insert('login_destination')->fields(array(
+    'triggers' => 'a:1:{s:5:"login";s:5:"login";}',
+    'roles' => 'a:0:{}',
+    'pages_type' => 0,
+    'pages' => '',
+    'destination_type' => 0,
+    'destination' => '<current>',
+    'weight' => 0
+  ))->execute();
+}
+
+/**
+ * Install hook
+ */
+function custom_login_install() {
+    custom_login_update_7010();
+    custom_login_update_7011();
+}
+
+/**
+ * Update hook
+ */
+function custom_login_update_7003() {
+    custom_login_insert_rule();
+}
+
+/**
+ * Update hook
+ */
+function custom_login_update_7010() {
+  // Delete previous rules.
+  db_delete('login_destination')->execute();
+  // Add new rules.
+  db_insert('login_destination')->fields(array(
+    'triggers' => 'a:1:{s:5:"login";s:5:"login";}',
+    'roles' => 'a:0:{}',
+    'pages_type' => 0,
+    'pages' => 'user/*',
+    'destination_type' => 0,
+    'destination' => '<current>',
+    'weight' => 0
+  ))->execute();
+  db_insert('login_destination')->fields(array(
+    'triggers' => 'a:1:{s:6:"logout";s:6:"logout";}',
+    'roles' => 'a:0:{}',
+    'pages_type' => 0,
+    'pages' => '',
+    'destination_type' => 0,
+    'destination' => '<front>',
+    'weight' => 0
+  ))->execute();
+  db_insert('login_destination')->fields(array(
+    'triggers' => 'a:1:{s:5:"login";s:5:"login";}',
+    'roles' => 'a:0:{}',
+    'pages_type' => 0,
+    'pages' => '',
+    'destination_type' => 0,
+    'destination' => '<current>',
+    'weight' => 0
+  ))->execute();
+}
+
+/**
+ * Insert destination rule.
+ */
+function custom_login_update_7011() {
+  // Add new rule.
+  db_insert('login_destination')->fields(array(
+    'triggers' => 'a:1:{s:5:"login";s:5:"login";}',
+    'roles' => 'a:0:{}',
+    'pages_type' => 1,
+    'pages' => 'user/registrationpassword/*/*/*',
+    'destination_type' => 0,
+    'destination' => 'my-account',
+    'weight' => -1
+  ))->execute();
+}

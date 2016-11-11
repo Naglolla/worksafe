@@ -1,0 +1,7 @@
+name = API Company Admin
+description = API Company Admin related customizations.
+package = API Custom
+version = VERSION
+core = 7.x
+
+dependencies[] = api_custom

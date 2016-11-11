@@ -1,0 +1,10 @@
+name = API WYSIWYG
+description = Export wysiwyg related configuration
+core = 7.x
+package = API Features
+dependencies[] = features
+dependencies[] = filter
+dependencies[] = wysiwyg
+features[features_api][] = api:1
+features[filter][] = full_html
+features[wysiwyg][] = full_html

@@ -1,0 +1,174 @@
+@page-width: 90%;
+.title-whit-divider {
+  font: @font-body-sub-title;
+  font-weight: 500;
+  color: @main-color-dark;
+  border-bottom: 10px solid @main-color-orange;
+  padding-bottom: 10px;
+  float: initial;
+  @media @small-size {
+    width: 100%;
+    font: @font-body-title-phone;
+    text-align: center;
+  }
+}
+
+&#page-mod-quiz-view,
+&#page-mod-quiz-summary,
+&#page-mod-quiz-review {
+  h2 {
+    width: @page-width;
+    margin-left: auto;
+    margin-right: auto;
+    .title-whit-divider;
+    @media @small-size {
+      width: 100%;
+    }
+  }
+  h3 {
+    width: @page-width;
+    margin-left: auto;
+    margin-right: auto;
+    @media @small-size {
+      width: 100%;
+    }
+  }
+  #feedback {
+    width: 100% !important;
+  }
+  .quizinfo, #quiz-timer  {
+    font: @font-body;
+    color: @main-color-dark;
+  }
+}
+
+&#page-mod-scorm-view,
+&#page-mod-quiz-attempt,
+&#page-mod-quiz-review {
+  .title-header {
+    width: @page-width;
+    margin: auto;
+    margin-top: 10px;
+    .name {
+      width: 100%;
+      .title-whit-divider;
+    }
+    div.link {
+      position: relative;
+      top: -50px;
+    }
+    @media @small-size {
+      width: 100%;
+    }
+  }
+  @media @small-size {
+    padding: 0;
+  }
+}
+
+
+
+/* exam */
+.que {
+  .info {
+    float: none;
+    position: relative;
+    top: -30px;
+    background-color: rgba(0,0,0,0);
+    border: 0;
+    width: @page-width;
+    margin: auto;
+    h3.no, h3.no span {
+      font: @font-body-info;
+      color: @main-color-dark;
+      font-weight: 500;
+    }
+    .state, .grade, .questionflag  {
+      display: none;
+    }
+  }
+  .formulation {
+    background-color: @main-color-white;
+    border: 0;
+    padding: 0;
+    font: @font-body-title;
+    color: @main-color-dark;
+    p {
+      font-weight: 700;
+    }
+    .prompt {
+      display: none;
+    }
+    .answer {
+      font-weight: 500;
+      label {
+        font: @font-body-title;
+        @media @small-size {
+          font: @font-body-button;
+        }
+      }
+      input[type="radio"] {
+        display:none;
+        + label {
+          line-height: 75px;
+          height: 80px;
+          display: inline-block;
+          padding-left: 100px;
+          background: url("@{images}/radio-button.png") no-repeat left center;
+          @media @small-size {
+            height: 40px;
+            line-height: 40px;
+            background-size: contain;
+            padding-left: 50px;
+          }
+        }
+        &:checked + label {
+          background: url("@{images}/radio-button-checked.png") no-repeat left center;
+          @media @small-size {
+            background-size: contain;
+          }
+        }
+      }
+    }
+    @media @small-size {
+      font: @font-body-button;
+    }
+  }
+  .content {
+    width: @page-width;
+    margin: auto;
+    @media @small-size {
+      width: 100%;
+    }
+  }
+}
+
+.submitbtns {
+  font: @font-body-table;
+  font-weight: 500;
+  margin-left: 5%;
+  margin-right: 5%;
+  .link {
+    top: 22px;
+    position: relative;
+    a {
+      font: @font-body-table;
+      color: @main-color-dark;
+      font-weight: 500;
+    }
+    @media @small-size {
+      display: block;
+      text-align: center;
+      float: initial !important;
+    }
+  }
+  @media @small-size {
+    margin: 0;
+    text-align: center;
+    input {
+      margin: 0;
+      padding: 15px 5px;
+      width: 100%;
+    }
+  }
+}

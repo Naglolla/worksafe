@@ -1,0 +1,119 @@
+body.page-import-users {
+  @page_width: 90%;
+  @page_width_content: 70%;
+  /* search user */
+  #search-user-block {
+    width: @page_width;
+    margin: auto;
+    padding-bottom: 45px;
+    margin-bottom: 20px;
+    
+    .ctools-collapsible-content {
+      margin: auto;
+      width: @page_width_content;
+      
+      /*search */
+      .views-exposed-widgets {
+        /* form */
+        #edit-name-wrapper {
+          float: none;
+          padding: 0;
+          label {
+            font: @font-body-button;
+            font-weight: 500;
+            position: relative;
+            text-transform: capitalize;
+            vertical-align: middle;
+            display: inline-block;
+            width: 30%;
+            @media @small-size {
+              width: 100%;
+              text-align: center;
+            }
+          }
+          div.views-widget {
+            width: 67% !important;
+            vertical-align: middle;
+            display: inline-block;
+            input {
+              width: 100% !important;
+            }
+            @media @small-size {
+              width: 100% !important;
+            }
+          }
+        }
+        /*button*/
+        .views-submit-button {
+          float: none;
+          padding: 0;
+          input {
+            margin-top: 1em;
+              @media @small-size {
+              width: 100%;
+            }
+          }
+        }
+      }
+      table.views-table {
+        margin-top: 1em;
+      }
+      
+      @media @middle-size {
+        width: @page_width;
+      }
+      @media @small-size {
+        width: 100%;
+      }
+    }
+  }
+  
+  /* import user */
+  #block-system-main {
+    width: @page_width;
+    margin: auto;
+    .fieldset-wrapper {
+      a {
+        @media @small-size {
+          text-align: center;
+          display: block;
+        }
+      }
+    }
+    #edit-feeds {
+      border-bottom: 0;
+      .feeds-file {
+        width: 67% !important;
+        display: inline-block;
+        .feeds-file-upload {
+          float: none;
+          #edit-feeds-feedsfilefetcher-upload {
+            width: 100% !important;
+            .box-sizing(border-box);
+          }
+        }
+        .description {
+          display: none;
+        }
+        @media @small-size {
+          width: 100% !important;
+        }
+      }
+      @media @small-size {
+        padding-bottom: 0;
+        margin-bottom: 0px;
+      }
+    }
+    /* submit button */
+    #edit-submit {
+      margin-left: 15%;
+      @media @middle-size {
+        margin-left: 5%;
+      }
+      @media @small-size {
+        width: 100%;
+        margin-left: 0;
+      }
+    }
+  }
+}

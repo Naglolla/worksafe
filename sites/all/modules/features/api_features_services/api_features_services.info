@@ -1,0 +1,10 @@
+name = API Features Services
+core = 7.x
+package = API Features
+php = 5.2.4
+dependencies[] = ctools
+dependencies[] = services
+features[ctools][] = services:services:3
+features[features_api][] = api:1
+features[services_endpoint][] = api
+mtime = 1432049968

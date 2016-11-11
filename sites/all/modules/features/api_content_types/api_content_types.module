@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Content Types feature.
+ */
+
+include_once 'api_content_types.features.inc';

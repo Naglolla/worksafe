@@ -1,0 +1,7 @@
+name = API Programs
+description = API Programs pages.
+package = API Custom
+version = VERSION
+core = 7.x
+dependencies[] = color_field
+files[] = api_programs.pages.inc

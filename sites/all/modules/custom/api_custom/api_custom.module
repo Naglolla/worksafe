@@ -1,0 +1,1072 @@
+<?php
+
+/**
+ * @file
+ * Provides custom functionality for API Worksafe 2.0 site.
+ */
+
+define('COMPANY_CONTENT_TYPE', 'company');
+define('BRANCH_CONTENT_TYPE', 'branch');
+
+/**
+ * Implemets HOOK_menu.
+ */
+function api_custom_menu() {
+  $items['node/%node/unpublish'] = array(
+    'title' => 'Delete Content',
+    'page callback' => 'api_custom_unpublish_node_page',
+    'page arguments' => array(1),
+    'access callback' => 'node_access',
+    'access arguments' => array('update', 1),
+    'file' => 'api_custom.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements HOOK_custom_theme().
+ *
+ * This is just temporary until the layout for the new theme is useful for all pages.
+ */
+function api_custom_custom_theme() {
+  if (drupal_is_front_page()) {
+    return 'worksafe';
+  }
+}
+/**
+ * Implemets HOOK_form_FORM_ID_alter.
+ */
+function api_custom_form_views_exposed_form_alter(&$form, &$form_state, $form_id) {
+  if ($form['#id'] == 'views-exposed-form-companies-page') {
+    $states = _api_custom_get_us_states();
+    $form['field_address_administrative_area']['#type'] = 'select';
+    $form['field_address_administrative_area']['#options'] = $states;
+    $form['field_address_administrative_area']['#multiple'] = FALSE;
+  }
+  if ($form['#id'] == 'views-exposed-form-safety-keys-admin-safety-keys-page') {
+    $program_title = api_programs_get_programs();
+    array_walk($program_title, '_get_object_property', 'title');
+
+    $program_id = api_programs_get_programs();
+    array_walk($program_id, '_get_object_property', 'program_id');
+    $programs = array('' => t('- All -'));
+    $programs += array_combine($program_id, $program_title);
+    // Sort programs in alphabetical order.
+    asort($programs);
+
+    $form['field_program_target_id']['#type'] = 'select';
+    $form['field_program_target_id']['#options'] = $programs;
+    $form['field_program_target_id']['#multiple'] = FALSE;
+    $form['field_program_target_id']['#required'] = FALSE;
+  }
+}
+
+/**
+ * Implemets HOOK_form_FORM_ID_alter.
+ */
+function api_custom_form_branch_node_form_alter(&$form, &$form_state, $form_id) {
+  // if available, get company id.
+  $company_nid = arg(4);
+
+  if (!empty($company_nid)) {
+    // load company node.
+    $company = node_load($company_nid);
+    if (!empty($company) && $company->type == 'company') {
+      // hide company field.
+      $form['field_company']['#access'] = FALSE;
+      // set default value.
+      $form['field_company'][LANGUAGE_NONE][0]['target_id']['#default_value'] = "$company->title ($company_nid)";
+    }
+  }
+  if (!empty($form['#node']->nid)) {
+    // hide company field on edit form.
+    $form['field_company']['#access'] = FALSE;
+  }
+  $form['#submit'][] = 'api_custom_form_branch_node_submit';
+}
+
+/**
+ * Submit callback.
+ */
+function api_custom_form_branch_node_submit(&$form, &$form_state) {
+  $values = &$form_state['values'];
+  // Prevent autonodetitle when user fills title_field.
+  if (!empty($values['title_field'][$values['language']][0]) && empty($values['title'])) {
+    $values['title'] = $values['title_field'][$values['language']][0];
+  }
+}
+
+/**
+ * Implemets HOOK_form_FORM_ID_alter.
+ */
+function api_custom_form_product_display_node_form_alter(&$form, &$form_state, $form_id) {
+
+  $form['actions']['submit']['#submit'][] = 'api_custom_form_product_display_node_form_submit';
+
+}
+
+/**
+ * Form submit callback.
+ * Redirect to programs admin page after creating/editing.
+ */
+function api_custom_form_product_display_node_form_submit($form, &$form_state) {
+  $form_state['redirect'] = 'admin/content/programs';
+}
+
+function api_custom_init() {
+  drupal_add_js(drupal_get_path('module', 'api_custom') . '/export.js');
+}
+
+
+/**
+ * Implements of hook_services_resources().
+ */
+function api_custom_services_resources() {
+  return array(
+    'api' => array(
+      'actions' => array(
+        'getCompanyBranches' => array(
+          'access callback' => 'api_custom_resource_retrieve_access',
+          'help' => 'Returns company branches.',
+          'callback' => 'api_custom_company_branches',
+          'args' => array(
+            array(
+              'name' => 'nid',
+              'optional' => FALSE,
+              'source' => array('data' => 'nid'),
+              'description' => t('Company node id.'),
+              'type' => 'string',
+            ),
+          ),
+        ),
+        'getCuponCodeVerification' => array(
+          'access callback' => 'api_custom_resource_retrieve_access',
+          'help' => 'Return if the coupon code already exists',
+          'callback' => 'api_custom_coupon_codeverification',
+          'args' => array(
+            array(
+              'name' => 'couponcode',
+              'optional' => FALSE,
+              'source' => array('data' => 'couponcode'),
+              'description' => t('Coupon code.'),
+              'type' => 'string',
+            ),
+          ),
+        ),
+        'getCuponGeneration' => array(
+          'access callback' => 'api_custom_resource_retrieve_access',
+          'help' => 'Return an unique coupon',
+          'callback' => 'api_custom_coupon_codegeneration',
+          'args' => array(
+            array(
+              'name' => 'lenght',
+              'optional' => FALSE,
+              'source' => array('data' => 'lenght'),
+              'description' => t('Coupon code.'),
+              'description' => t('Coupon code.'),
+              'type' => 'string',
+            ),
+          ),
+        ),
+        'getCompanies' => array(
+          'access callback' => 'api_custom_resource_retrieve_access',
+          'help' => 'Returns companies.',
+          'callback' => 'api_custom_companies',
+        ),
+      ),
+    ),
+  );
+}
+
+function api_custom_coupon_codeverification($couponcode) {
+  return ($couponcode == "") ? array("result" => TRUE) : array("result" => commerce_coupon_code_exists($couponcode));
+}
+
+function api_custom_coupon_codegeneration() {
+  return array('result' => commerce_coupon_generate_coupon_code());
+}
+
+/**
+ * Service callback.
+ */
+function api_custom_company_branches($nid) {
+  if (!empty($nid) && is_numeric($nid)) {
+    $branches = array();
+    $branchesQuery = new EntityFieldQuery();
+    $branchesQuery->entityCondition('entity_type', 'node')
+      ->propertyCondition('type', BRANCH_CONTENT_TYPE)
+      ->propertyCondition('status', NODE_PUBLISHED)
+      ->fieldCondition('field_company', 'target_id', $nid);
+    $result = $branchesQuery->execute();
+    if (isset($result['node'])) {
+      foreach ($result['node'] as $branch_nid => $branch_value) {
+        $branch = node_load($branch_nid);
+        $branchObj = new stdClass();
+        // Try to get the State name
+        $state = _api_custom_field_item('node', $branch, 'field_address', 'administrative_area');
+        $states = _api_custom_get_us_states();
+        $branchObj->state_name = !empty($states[$state]) ? $states[$state] : $state;
+
+        // Try to get the Country name
+        $country = _api_custom_field_item('node', $branch, 'field_address', 'country');
+        $countries = _addressfield_country_options_list();
+        $branchObj->country_name = !empty($countries[$country]) ? $countries[$country] : $country;
+
+        $branchObj->nid = $branch->nid;
+        $branchObj->name = html_entity_decode($branch->title, ENT_QUOTES);
+        $branchObj->address_1 = _api_custom_field_item('node', $branch, 'field_address', 'thoroughfare');
+        $branchObj->address_2 = _api_custom_field_item('node', $branch, 'field_address', 'premise');
+        $branchObj->country = $country;
+        $branchObj->state = $state;
+        $branchObj->city = _api_custom_field_item('node', $branch, 'field_address', 'locality');
+        $branchObj->province_region = _api_custom_field_item('node', $branch, 'field_address', 'province_region');
+        $branchObj->zip = _api_custom_field_item('node', $branch, 'field_address', 'postal_code');
+        $branchObj->tel = _api_custom_field_item('node', $branch, 'field_tel');
+        $branches[$branch->nid] = $branchObj;
+
+      }
+    }
+    return $branches;
+  }
+  return FALSE;
+}
+
+function api_custom_companies() {
+  $companies = &drupal_static(__FUNCTION__);
+  if (!isset($companies)) {
+    $query = db_select('node', 'n');
+    $query->fields('n', array('nid', 'title'));
+    $query->condition('n.status', NODE_PUBLISHED)
+      ->condition('n.type', COMPANY_CONTENT_TYPE);
+    $query->orderBy('title');
+    $companies = $query->execute()->fetchAllKeyed(0, 1);
+  }
+  return $companies;
+}
+
+/**
+ * Helper to get the field value
+ */
+function _api_custom_field_item($type = 'node', $entity, $field_name, $property = 'value', $key = 0) {
+  // Allowed tags
+  $allowed_tags = array(
+    'p',
+    'a',
+    'em',
+    'strong',
+    'ul',
+    'ol',
+    'li',
+    'dl',
+    'dt',
+    'dd'
+  );
+  $output = '';
+  $items = field_get_items($type, $entity, $field_name);
+  if (is_null($key)) {
+    return $items;
+  }
+  if (isset($items[$key][$property]) && $items[$key][$property]) {
+    $output = filter_xss($items[$key][$property], $allowed_tags);
+  }
+
+  return $output;
+}
+
+/**
+ * Services access.
+ */
+function api_custom_resource_retrieve_access() {
+  return user_access('access content');
+}
+
+/**
+ * Helper function _api_custom_get_us_states.
+ */
+function _api_custom_get_us_states() {
+  return array(
+    '' => t('--'),
+    'AL' => t('Alabama'),
+    'AK' => t('Alaska'),
+    'AZ' => t('Arizona'),
+    'AR' => t('Arkansas'),
+    'CA' => t('California'),
+    'CO' => t('Colorado'),
+    'CT' => t('Connecticut'),
+    'DE' => t('Delaware'),
+    'DC' => t('District Of Columbia'),
+    'FL' => t('Florida'),
+    'GA' => t('Georgia'),
+    'HI' => t('Hawaii'),
+    'ID' => t('Idaho'),
+    'IL' => t('Illinois'),
+    'IN' => t('Indiana'),
+    'IA' => t('Iowa'),
+    'KS' => t('Kansas'),
+    'KY' => t('Kentucky'),
+    'LA' => t('Louisiana'),
+    'ME' => t('Maine'),
+    'MD' => t('Maryland'),
+    'MA' => t('Massachusetts'),
+    'MI' => t('Michigan'),
+    'MN' => t('Minnesota'),
+    'MS' => t('Mississippi'),
+    'MO' => t('Missouri'),
+    'MT' => t('Montana'),
+    'NE' => t('Nebraska'),
+    'NV' => t('Nevada'),
+    'NH' => t('New Hampshire'),
+    'NJ' => t('New Jersey'),
+    'NM' => t('New Mexico'),
+    'NY' => t('New York'),
+    'NC' => t('North Carolina'),
+    'ND' => t('North Dakota'),
+    'OH' => t('Ohio'),
+    'OK' => t('Oklahoma'),
+    'OR' => t('Oregon'),
+    'PA' => t('Pennsylvania'),
+    'RI' => t('Rhode Island'),
+    'SC' => t('South Carolina'),
+    'SD' => t('South Dakota'),
+    'TN' => t('Tennessee'),
+    'TX' => t('Texas'),
+    'UT' => t('Utah'),
+    'VT' => t('Vermont'),
+    'VA' => t('Virginia'),
+    'WA' => t('Washington'),
+    'WV' => t('West Virginia'),
+    'WI' => t('Wisconsin'),
+    'WY' => t('Wyoming'),
+    ' ' => t('--'),
+    'AA' => t('Armed Forces (Americas)'),
+    'AE' => t('Armed Forces (Europe, Canada, Middle East, Africa)'),
+    'AP' => t('Armed Forces (Pacific)'),
+    'AS' => t('American Samoa'),
+    'FM' => t('Federated States of Micronesia'),
+    'GU' => t('Guam'),
+    'MH' => t('Marshall Islands'),
+    'MP' => t('Northern Mariana Islands'),
+    'PW' => t('Palau'),
+    'PR' => t('Puerto Rico'),
+    'VI' => t('Virgin Islands'),
+  );
+}
+
+/**
+ * Implements hook_views_api().
+ *
+ * Used for enabling using templates inside my module
+ */
+function api_custom_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'api_custom'),
+    'template path' => drupal_get_path('module', 'api_custom'),
+  );
+}
+
+/**
+ * Implemets HOOK_form_FORM_ID_alter.
+ */
+function api_custom_form_commerce_coupon_form_alter(&$form, &$form_state, $form_id) {
+
+  $form['field_states']['#multiple'] = TRUE;
+  $form['is_active']['#title'] = t("Enable/Disable");
+  if ($form['#entity']->type == 'commerce_coupon_fixed') {
+    $form['commerce_coupon_code']['#weight'] = 0;
+    $form['commerce_coupon_fixed_amount']['#weight'] = 1;
+
+    $form['field_commerce_couponprodref']['#weight'] = 7;
+    $form['is_active']['#weight'] = 6;
+    $form['field_states']['#weight'] = 8;
+  }
+
+  if ($form['#entity']->type == 'commerce_coupon_pct') {
+    $form['is_active']['#weight'] = 2;
+    $form['field_states']['#weight'] = 5;
+    $form['field_commerce_company']['#weight'] = 7;
+    //$form['field_commerce_couponprodref']['#weight'] = 10;
+  }
+
+  $form['commerce_coupon_number_of_uses']['#access'] = FALSE;
+
+
+  $form['cancel_button'] = array(
+    '#type' => 'button',
+    '#value' => t('Cancel'),
+    '#title' => t('Cancel'),
+    '#weight' => 10,
+    '#attributes' => array('style' => 'display:none'),
+  );
+
+  @$form['field_commerce_couponprodref']['und']['#title'] = t('Program');
+
+  $form['#attached']['js'] = array(
+    drupal_get_path('module', 'api_custom') . '/api_custom.js' => array(
+      'type' => 'file',
+      'scope' => 'footer'
+    )
+  );
+  $form['commerce_coupon_code']['#weight'] = -1;
+  
+  if (isset($form_state['build_info']['args'][0]->is_new) && $form_state['build_info']['args'][0]->is_new) {
+    $form['code_generationn_button'] = array(
+      '#type' => 'link',
+      '#value' => t('Generate Coupon Code'),
+      '#title' => t('Generate Coupon Code'),
+      '#href' => '#',
+      '#weight' => 0,
+      '#attributes' => array('style' => array('margin-right: 20px;')),
+    );
+    $form['code_verification_button'] = array(
+      '#type' => 'link',
+      '#value' => t('Verify Coupon Code'),
+      '#title' => t('Verify Coupon Code'),
+      '#href' => '#',
+      '#weight' => 1,
+      '#attributes' => array('style' => array('margin-right: 20px;')),
+    );
+    $form['actions']['submit']['#value'] = t('Create');
+  }
+  else {
+
+    //exit;
+    global $base_url;
+
+    $form['actions']['submit']['#value'] = t('Update Coupon');
+    $form['delete_link'] = array('#markup' => l(t('Delete'), $base_url . '/admin/commerce/coupons/' . $form['#entity']->coupon_id . '/delete?destination=admin/commerce/coupons/list/'));
+
+    $form['delete_link']['#weight'] = 11;
+    $form['cancel_button']['#weight'] = 1200;
+    $form['update_button'] = array(
+      '#type' => 'button',
+      '#value' => t('Update'),
+      '#weight' => 10,
+    );
+
+  }
+
+}
+
+/**
+ * Implemets HOOK_form_FORM_ID_alter.
+ */
+function api_custom_form_alter(&$form, &$form_state, $form_id) {
+  global $user;
+  global $theme;
+
+  $optionsproduct[''] = t('Select Program');
+  $nodes = node_load_multiple(array(), array('type' => 'product_display'));
+
+  foreach ($nodes as $key => $node) {
+    $optionsproduct[$node->vid] = $node->title;
+  }
+
+  switch ($form_id) {
+    case 'user_profile_form':
+      $form['field_first_name']['#disabled'] = TRUE;
+      $form['field_middle_name']['#disabled'] = TRUE;
+      $form['field_last_name']['#disabled'] = TRUE;
+      $form['account']['name']['#disabled'] = TRUE;
+      $form['account']['name']['#access'] = FALSE;
+      $form['field_accept_terms_and_condition']['#access'] = FALSE;
+
+      if ($theme == 'worksafe') {
+        // User can't edit personal info.
+        $form['field_first_name']['#access'] = FALSE;
+        $form['field_middle_name']['#access'] = FALSE;
+        $form['field_last_name']['#access'] = FALSE;
+        // Fetch personal info.
+        $first = field_get_items('user', $form['#user'], 'field_first_name');
+        $middle = field_get_items('user', $form['#user'], 'field_middle_name');
+        $middle = (isset($middle[0]['value'])) ? $middle[0]['value'] . ' ' : '';
+        $last = field_get_items('user', $form['#user'], 'field_last_name');
+
+        $form['user_personal_data_markup'] = array(
+          '#type' => 'markup',
+          '#weight' => 0,
+          '#markup' =>
+            "<label>" . t('Name') . "</label>" .
+            "<span class='user-personal-data-content'>" . $first[0]['value'] . ' ' . $middle . $last[0]['value'] . "</span>",
+          '#prefix' => '<div class="user-personal-data form-item" id="user-personal-data">',
+          '#suffix' => '</div>',
+        );
+        // Add markup to proper group.
+        $form['#fieldgroups']['group_register']->children[] = 'user_personal_data_markup';
+        $form['#group_children']['user_personal_data_markup'] = 'group_register';
+      }
+      break;
+    case 'commerce_checkout_form_checkout':
+      /*
+      $user = user_load($user->uid);
+      $form['customer_profile_billing']['commerce_customer_address']['und'][0]['#address']  = $user->field_address['und'][0];
+      $username = $user->field_first_name['und'][0]['value'] . ' ' . $user->field_last_name['und'][0]['value'];
+      $form['customer_profile_billing']['commerce_customer_address']['und'][0]['#address']['name_line'] = $username;
+      */
+      break;
+    case 'commerce_coupon_form':
+      foreach($form["field_company"]["und"]["#options"] as $key => $value){
+        $form["field_company"]["und"]["#options"][$key] = html_entity_decode($value, ENT_QUOTES);
+      }
+      break;
+  }
+
+  if (@is_array($form['#info']['filter-commerce_coupon_code_value'])) {
+
+    $options[''] = t('Select Company');
+    $options += api_custom_companies();
+
+    $form['field_company_target_id'] = array(
+      '#type' => 'select',
+      '#options' => $options,
+      '#default_value' => 0,
+      '#validated' => TRUE,
+    );
+
+    $form['field_commerce_couponprodref_target_id'] = array(
+      '#type' => 'select',
+      '#options' => $optionsproduct,
+      '#default_value' => 0,
+      '#validated' => TRUE,
+      '#label' => t('Program'),
+    );
+
+  }
+}
+
+function api_custom_unpublish_node($nid) {
+  $node = node_load($nid);
+  if (!empty($node)) {
+    $node->status = NODE_NOT_PUBLISHED;
+    node_save($node);
+    return TRUE;
+  }
+  return FALSE;
+}
+
+function api_custom_unpublish_related_content($node) {
+  $users = array();
+  switch ($node->type) {
+    case COMPANY_CONTENT_TYPE:
+      $users = api_users_get_company_employees($node->nid);
+      // Unpublish related branches.
+      $branches = api_users_get_company_branches($node->nid);
+      if (!empty($branches)) {
+        foreach ($branches as $key => $branch_nid) {
+          $branch = node_load($branch_nid);
+          $branch->status = NODE_NOT_PUBLISHED;
+          node_save($branch);
+        }
+      }
+      break;
+    case BRANCH_CONTENT_TYPE:
+      $users = api_users_get_branch_employees($node->nid);
+      break;
+  }
+  // Block related users.
+  if (!empty($users)) {
+    foreach ($users as $key => $user) {
+      $user_object = user_load($user);
+      $user_object->status = 0;
+      user_save($user_object);
+    }
+  }
+}
+
+/**
+ * Implements HOOK_node_update.
+ */
+function api_custom_node_update($node) {
+  if ($node->status == NODE_NOT_PUBLISHED) {
+    api_custom_unpublish_related_content($node);
+  }
+}
+
+
+function api_custom_user_update(&$edit, $account, $category) {
+  if ($category == 'account') {
+    if (array_key_exists('pass', $edit) && (($edit['original']->pass !== $edit['pass']))) {
+      // Return if is the user account activation
+      if ($account->uid && $account->status === "0" && $edit['status'] == 1) {
+        return;
+      }
+      $home_url = url('<front>',array('absolute' => TRUE));
+      $content = array();
+      $content['to'] = $account->mail;
+      $content['language'] = language_default();
+      $content['email_from'] = variable_get('system_mail', 'no-reply@Worksafe.com');
+      $content['params'] = array(
+        'headers' => array(
+          'MIME-Version' => '1.0',
+          'Content-Type' => 'text/html; charset=UTF-8; format=flowed',
+          'Content-Transfer-Encoding' => '8Bit',
+          'X-Mailer' => 'Drupal'
+        ),
+        'subject' => t('WorkSafe Password Update'),
+        'message' => 'Your password was successfully changed on ' . $home_url . '<br><p>--  API WorkSafe team.</p>',
+      );
+      $message = drupal_mail('api_custom', 'password_update', $content['to'], $content['language'], $content['params'], $content['email_from']);
+
+    }
+  }
+}
+
+function api_custom_user_presave(&$edit, $account, $category) {
+  if (isset($account->uid) && isset($account->status) && $account->status === "0" && $edit['status'] == 1) {
+    $program_url = url('programs',array('absolute' => TRUE));
+    $safetykey_url = url('search/safety_key',array('absolute' => TRUE));
+    $body = '
+      <p>Welcome to WorkSafe. As a member you will be able to access the full site, explore our programs and take advantage of the services we offer.</p><br><a href="' . $program_url . '" target="_blank">Programs</a>
+      <br>
+      <a href="' . $safetykey_url . '" target="_blank">Safety Key</a>
+      <br>
+      <p>Thanks for joining us. The API WorkSafe Team</p>
+    ';
+    $content = array();
+    $content['to'] = $account->mail;
+    $content['language'] = language_default();
+    $content['email_from'] = variable_get('system_mail', 'no-reply@Worksafe.com');
+    $content['params'] = array(
+      'headers' => array(
+        'MIME-Version' => '1.0',
+        'Content-Type' => 'text/html; charset=UTF-8; format=flowed',
+        'Content-Transfer-Encoding' => '8Bit',
+        'X-Mailer' => 'Drupal'
+      ),
+      'subject' => t('Welcome to WorkSafe'),
+      'message' => $body,
+    );
+    $message = drupal_mail('api_custom', 'mailtoken', $content['to'], $content['language'], $content['params'], $content['email_from']);
+  }
+}
+
+/**
+ * Helper to get the field image
+ */
+function _api_custom_get_field_image($type = 'node', $entity, $field_name, $style = FALSE, $key = 0) {
+  // Get image item.
+  $items = field_get_items($type, $entity, $field_name);
+  if (isset($items[$key]['uri'])) {
+    if ($style) {
+      return image_style_url($style, $items[$key]['uri']);
+    }
+    return file_create_url($items[$key]['uri']);
+  }
+  return FALSE;
+}
+
+
+/**
+ * Implements HOOK_block_info().
+ */
+function api_custom_block_info() {
+  $blocks['api_custom_full_hero_block'] = array(
+    'info' => t('Full Hero Header block'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  $blocks['api_custom_hello_user_block'] = array(
+    'info' => t('Hello user block'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  $blocks['api_training_programs'] = array(
+    'info' => t('Training Programs'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  $blocks['api_footer_copyright'] = array(
+    'info' => t('Footer Copyright'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  $blocks['api_directory_links'] = array(
+    'info' => t('Directory and Safty key Links'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+
+  return $blocks;
+}
+
+/**
+ * Implements HOOK_block_view().
+ */
+function api_custom_block_view($delta = '') {
+  global $user;
+
+  $user_info = user_load($user->uid);
+  $first_name = _api_custom_field_item('user', $user_info, 'field_first_name', 'value');
+  $last_name = _api_custom_field_item('user', $user_info, 'field_last_name', 'value');
+
+  $content = '<div id="hello-user-block">' . t('Hello') . ', <span class="name">' . $first_name . ' ' . $last_name . '</span></div>';
+
+  $block = array();
+
+  switch ($delta) {
+    case 'api_custom_full_hero_block':
+      $block['subject'] = '';
+      $block['description'] = t('Full Hero Header');
+      $block['content'] = api_custom_get_full_hero_content();
+      break;
+    case 'api_custom_hello_user_block':
+      $block['subject'] = t('Final Exam');
+      $block['content'] = $content;
+      break;
+    case 'api_training_programs':
+      $block['subject'] = '';
+      $block['content'] = api_custom_get_training_programs_content();
+      break;
+    case 'api_footer_copyright':
+      $block['subject'] = '';
+      $block['content'] = api_custom_get_footer_copyright_content();
+      break;
+    case 'api_directory_links':
+      $block['subject'] = '';
+      $block['description'] = t('Footer Directory and Safty key Links');
+      $block['content'] = api_custom_get_directory_links_content();
+      break;
+  }
+
+  return $block;
+}
+
+/**
+ * Render Full Hero Header content.
+ */
+function api_custom_get_full_hero_content() {
+  $variables = array();
+  return theme('full_hero_header', $variables);
+}
+
+/**
+ * Render Training Programs content.
+ */
+function api_custom_get_training_programs_content() {
+  $queue = nodequeue_load_queue_by_name('homepage_programs');
+  $nodes = nodequeue_load_nodes($queue->qid);
+  $variables = array('nodes' => $nodes);
+  return theme('training_programs', $variables);
+}
+
+/**
+ * Render Footer Copyright content.
+ */
+function api_custom_get_footer_copyright_content() {
+  // Help & FAQ url.
+  $help_faq_url = 'help-and-faq';
+  $variables = array(
+    'help_faq_url' => $help_faq_url
+  );
+  return theme('footer_copyright', $variables);
+}
+
+/**
+ * Render Directory Links content.
+ */
+function api_custom_get_directory_links_content() {
+  // Directory
+  $directory_url = url('directory/search', array('absolute'=>TRUE));
+
+  // Safety Keys.
+  $safety_keys = array();
+  $safety_keys['safety_help_url'] = url('search/safety_key', array('absolute'=>TRUE));
+  $safety_keys['safety_help_text'] = variable_get('api_safety_key_directory_text', '');
+
+  // Tokens.
+  $token_nid = variable_get('token_node_nid', '');
+  $tokens_url = '';
+  if ($token_nid) {
+    // URL Alias Path generated by Drupal.
+    $tokens_url = url('node/' . $token_nid, array('absolute'=>TRUE));
+  }
+  $variables = array(
+    'directory_url' => $directory_url,
+    'safety_keys' => $safety_keys,
+    'tokens_url' => $tokens_url,
+  );
+
+  return theme('directory_links', $variables);
+}
+
+function api_custom_commerce_payment_method_info_alter(&$payment_methods) {
+  $payment_methods['paypal_wpp']['active'] = TRUE;
+  $payment_methods['commerce_payment_example']['active'] = FALSE;
+}
+
+/**
+ * Implements hook_ctools_plugin_directory().
+ */
+function api_custom_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'addressfield') {
+    return 'plugins/' . $plugin;
+  }
+}
+
+/**
+ * Implements hook_field_info_alter().
+ *
+ * Add province/region related properties on addressfield.
+ */
+function api_custom_field_info_alter(&$field_info) {
+  if (isset($field_info['addressfield'])) {
+    $field_info['addressfield']['property_callbacks'][] = 'api_custom_property_info_callback';
+  }
+}
+
+/**
+ * Callback to alter the property info of addressfield.
+ */
+function api_custom_property_info_callback(&$info, $entity_type, $field, $instance, $field_type) {
+  $name = $field['field_name'];
+  $property = &$info[$entity_type]['bundles'][$instance['bundle']]['properties'][$name];
+
+  $property['property info'] += api_custom_data_property_info();
+}
+
+/**
+ * Defines additional properties of the addressfield data structure.
+ */
+function api_custom_data_property_info($name = NULL) {
+  // Build an array of basic property information for the addressfield.
+  $properties = array(
+    'province_region' => array(
+      'label' => t('Province / Region'),
+    ),
+  );
+
+  // Add the default values for each of the address field phone properties.
+  foreach ($properties as $key => &$value) {
+    $value += array(
+      'description' => $name ? t('!label of field %name', array('!label' => $value['label'], '%name' => $name)) : '',
+      'type' => 'text',
+      'getter callback' => 'entity_property_verbatim_get',
+      'setter callback' => 'entity_property_verbatim_set',
+    );
+  }
+
+  return $properties;
+}
+
+/**
+ * Implements hook_field_attach_presave().
+ *
+ * Store additional address fields serialized in addressfield data column.
+ */
+function api_custom_field_attach_presave($entity_type, $entity) {
+  $addressfields = api_custom_addressfield_types();
+  foreach ($addressfields as $field_name) {
+    if (isset($entity->$field_name)){
+      $default_fields = array_keys(addressfield_default_values());
+      $default_fields[] = 'element_key';
+      foreach ($entity->$field_name as $lang_code => $fields) {
+        foreach ($fields as $delta => $fieldset) {
+          $data = array();
+          foreach ($fieldset as $field_key => $field_value) {
+            // Compare fields with addressfield default fields and store any
+            // additional fields in data.
+            if (!in_array($field_key, $default_fields)){
+              // Store additional field value
+              $data[$field_key] = $field_value;
+            }
+          }
+          if (!empty($data)){
+            $entity->{$field_name}[$lang_code][$delta]['data'] = serialize($data);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_field_attach_load().
+ *
+ * Load and set additional addressfield field values from serialized data
+ * column.
+ */
+function api_custom_field_attach_load($entity_type, $entities, $age, $options){
+  $addressfields = api_custom_addressfield_types();
+  $region_elements = drupal_map_assoc(array(
+    'province_region',
+  ));
+
+  foreach ($entities as $entity) {
+    foreach ($addressfields as $field_name) {
+      if (empty($entity->{$field_name})) {
+        continue;
+      }
+
+      foreach ($entity->$field_name as $lang_code => $fields) {
+        foreach ($fields as $delta => $fieldset) {
+          if (!empty($fieldset['data'])){
+            // Unserialize data, else skip if string
+            if (($data = unserialize($fieldset['data'])) && is_array($data)) {
+              // Store unserialized data values in additional fields
+              $region_data = array_intersect_key($data, $region_elements);
+              $entity->{$field_name}[$lang_code][$delta] = array_merge($fieldset, $region_data);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Returns an array of the field names of any addressfields.
+ */
+function api_custom_addressfield_types() {
+  if (!isset($addressfields)) {
+    static $addressfields;
+    $result = db_query("SELECT field_name FROM {field_config} WHERE type = 'addressfield'");
+    $addressfields = array();
+    foreach($result as $row) {
+      $addressfields[] = $row->field_name;
+    }
+  }
+  return $addressfields;
+}
+
+function _api_custom_render_address($format) {
+  $address = $format['#address'];
+  $format['locality_block']['province_region'] = array(
+      '#title' => t('Province / Region'),
+      '#size' => 30,
+      '#attributes' => array('class' => array('province-region')),
+      '#tag' => 'span',
+    );
+  $format['locality_block']['postal_code']['#weight'] = 3;
+  $format['locality_block']['postal_code']['#title'] = t('ZIP / Postal Code');
+
+  return $format;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function api_custom_menu_alter(&$items) {
+  // Change Fixed Code title.
+  $items['admin/commerce/coupons/add/commerce-coupon-fixed']['title'] = 'Create Fixed Price Promo Code';
+  // Change Percentage Code title.
+  $items['admin/commerce/coupons/add/commerce-coupon-pct']['title'] = 'Create Percentage Promotional Code';
+  // Change Create Coupon title and description.
+  $items['admin/commerce/coupons/add']['title'] = 'Create Promotional Code';
+  $items['admin/commerce/coupons/add']['description'] = 'Create a new promotional code';
+}
+
+/**
+ * Implements HOOK_theme().
+ */
+function api_custom_theme() {
+  $module_path = drupal_get_path('module', 'api_custom');
+  return array(
+    'full_hero_header' => array(
+      'variables' => array('variables' => NULL),
+      'template' => 'templates/full-hero-header',
+    ),
+    'training_programs' => array(
+      'variables' => array('variables' => NULL),
+      'template' => 'templates/training-programs',
+    ),
+    'footer_copyright' => array(
+      'variables' => array('variables' => NULL),
+      'template' => 'templates/footer-copyright',
+    ),
+    'directory_links' => array(
+      'variables' => array('variables' => NULL),
+      'template' => 'templates/directory-links',
+    ),
+    'api_mail' => array(
+      'variables' => array('variables' => NULL),
+      'template' => 'templates/api-mail',
+    ),
+  );
+}
+
+/**
+ * Implements hook_date_formats().
+ */
+function api_custom_date_formats() {
+  return array(
+    // Creates a new format for a new, custom format type.
+    array(
+      'type' => 'api_short_d_M_y',
+      'format' => 'd-M-y',
+      'locales' => array(),
+    ),
+  );
+}
+
+/**
+ * Implements hook_date_format_types().
+ */
+function api_custom_date_format_types() {
+  return array(
+    'api_short_d_M_y' => t('API Short: d-M-y'),
+  );
+}
+
+/**
+ * Implements hook_mail().
+ */
+function api_custom_mail($key, &$message, $params) {
+  $message['headers'] = array_merge($message['headers'], $params['headers']);
+  $message['subject'] = $params['subject'];
+  $message['body'][] = $params['message'];
+}
+
+/**
+ * Implements hook_mail_alter().
+ * Manage all HTML templates.
+ */
+function api_custom_mail_alter(&$message) {
+  if ($message['key'] == 'contact') {
+    return;
+  }
+
+  // Allow overriding Drupal's core restriction to HTML templates.
+  $message['headers']['Content-Type'] = 'text/html; charset=UTF-8; format=flowed; delsp=yes';
+
+  global $base_url;
+  $variables = array();
+  $variables['base_url'] = $base_url;
+  $variables['mail_type'] = isset($message['mail_type']) ? $message['mail_type'] : '';
+  $variables['show_cart'] = FALSE;
+  switch ($message['key']) {
+    case 'upgrade_request':
+    case 'upgrade_request_sent':
+    case 'notify_upgrade':
+      $variables['header_title'] = t('CUSTOMER SUPPORT');
+      break;
+    case 'register':
+    case 'mailtoken':
+    case 'feed_user_import_admin_registration':
+      $variables['header_title'] = t('REGISTRATION');
+      break;
+    case 'password_update':
+    case 'password_reset':
+      $variables['header_title'] = t('PASSWORD');
+      break;
+    case 'company_update':
+      $variables['header_title'] = t('COMPANY UPDATE');
+      break;
+    case 'commerce_order_order_confirmation':
+    case 'company_admin_order_notification':
+      $variables['header_title'] = t('ORDER DETAILS');
+      $variables['show_cart'] = TRUE;
+      break;
+    case 'feed_user_import':
+      $variables['header_title'] = t('ACCOUNT INFORMATION');
+      break;
+    default:
+      $variables['header_title'] = '';
+  }
+
+//For purchases the orange text should say ORDER DETAILS,
+//For a new registrant the email should say REGISTRATION,
+//For a reset password or username it should say PASSWORD or USERNAME,
+//For a customer support question it should say CUSTOMER SUPPORT.
+
+  $variables['copyright'] = module_invoke('api_custom', 'block_view', 'api_footer_copyright');
+  $variables['content'] = $message['body'][0];
+  $variables['logo_icon_path'] = variable_get('api_mails_logo_icon', 'https://worksafe2.api.org/sites/all/themes/worksafe/images/api-worksafe-logo.png');
+  $variables['cart_icon_path'] = variable_get('api_mails_cart_icon', 'http://www.api.org/~/media/homepage%20images/logo.png?h=69&la=en&w=250');
+
+  $message['body'][0] = theme('api_mail', $variables);
+}

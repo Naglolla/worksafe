@@ -1,0 +1,79 @@
+/* Custom CSS
+-------------------------*/
+a.logo {
+    background: url([[setting:logo]]) no-repeat 0 0;
+    display: block;
+    float: left;
+    height: 75px;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.dir-rtl a.logo {
+    background: url([[setting:logo]]) no-repeat 100% 0;
+    display: block;
+    float: right;
+}
+
+/* Integrate model into drupal */
+.iframe-page-load header.navbar-fixed-top,
+.iframe-page-load #page-header,
+.iframe-page-load #page-navbar,
+.iframe-page-load #page-footer {
+  display: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Open Sans", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+p, dl, hr, h1, h2, h3, h4, h5, h6, ol, ul, pre, table, address, fieldset {
+  margin-bottom: 20px;
+}
+
+h3 {
+  font-size: 21px;
+}
+
+.course-content ul.weeks li.section {
+  list-style: none;
+  margin: 0;
+}
+
+.course-content .current {
+  background-color: #eeeeee;
+}
+
+/* End Integrate model into drupal */
+
+/* Quiz */
+.clear {
+  clear: both;
+}
+body#page-mod-quiz-attempt div.name,body#page-mod-quiz-review div.name {
+  float: left;
+}
+body#page-mod-quiz-attempt div.link,body#page-mod-quiz-review div.link {
+  float: right;
+}
+body#page-mod-quiz-review span.passed {
+  color: #00ff00;
+}
+body#page-mod-quiz-review span.failed {
+  color: #ff0000;
+}
+body#page-mod-quiz-view div.continuebutton {
+  display: none;
+}
+body#page-mod-quiz-view div.alert.alert-block.alert-info {
+  display: none;
+}
+
+/* End Quiz*/
+
+/* Custom CSS Settings
+-------------------------*/
+[[setting:customcss]]

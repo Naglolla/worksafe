@@ -1,0 +1,68 @@
+ul.primary {
+  border: 0;
+  text-transform: uppercase;
+  text-align: center;
+  li {
+    a{
+      color: @main-color-dark;
+      background: none;
+      border: 0;
+      font: @font-menu;
+      font-weight: 700;
+      &:hover {
+        background: none;
+        color: @main-color-orange;
+        @media @small-size {
+          color: @main-color-white;
+        }
+      }
+      @media @small-size {
+        font-size: 12px;
+        text-transform: uppercase;
+        color: @main-color-white;
+        margin: 0;
+        padding: 0;
+        span {
+          display: none;
+        }
+      }
+    }
+    &.active {
+      a {
+        color: @main-color-orange;
+        background: none;
+        border: 0;
+        @media @small-size {
+          text-transform: uppercase;
+          color: @main-color-white;
+        }
+      }
+      @media @small-size {
+        background-color: @main-color-blue;
+        &:hover {
+          color: @main-color-white;
+          background-color: darken(@main-color-blue, 10%) !important;
+        }
+      }
+    }
+    @media @small-size {
+      font: @font-body-button;
+      font-weight: 700;
+      text-align: center;
+      padding: 10px 0;
+      width: 46%;
+      display: block;
+      margin: 8px 2%;
+      float: left;
+      background-color: @main-color-disable;
+      &:hover {
+        background-color: darken(@main-color-disable, 10%) !important;
+      }
+    }
+  }
+  
+  @media @small-size {
+    margin: 0;
+    padding: 0;
+  }
+}

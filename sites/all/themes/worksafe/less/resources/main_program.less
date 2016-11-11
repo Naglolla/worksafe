@@ -1,0 +1,229 @@
+#training-program {
+  .title {
+    font: @font-body-title;
+    color: @main-color-dark;
+    font-weight: 300;
+    text-align: center;
+    padding: 150px 0 75px 0;
+    @media @ipad-size {
+      font: @font-body-title-phone;
+      font-weight: 300;
+      padding: 40px 0 25px 0;
+      margin-top: 15px;
+    }
+  }
+  .no-margin {
+    width: 50%;
+    margin: 0;
+  }
+  .content {
+    margin: auto;
+  }
+  
+  .header {
+    width: 100%;
+    height: 10px;
+  }
+  #program-container {
+    div.no-margin:nth-of-type(2n) > div {
+      float: left;
+    }
+    .program {
+      max-width: 435px;
+      width: 100%;
+      height: 250px;
+      margin: 5px;
+      float: right;
+      &:hover {
+        background: none;
+        background: @main-color-blue !important;
+        .information{
+            display: block;
+        }
+        .purchase{
+            display: block;
+        }
+        .header {
+          background-color: @main-color-blue;
+        }
+      }
+
+      .name {
+        text-align: center;
+        margin: 28px auto 15px auto;
+        color: @main-color-white;
+        font: @font-body-sub-title;
+        font-weight: 700;
+        height: 76px;
+        width: 98%;
+        .box-sizing(content-box);
+        overflow: hidden;
+      }
+
+      .information {
+        width: 270px;
+        height: 70px;
+        margin: auto;
+        color: @main-color-white;
+        font: @font-body;
+        font-weight: 300;
+        text-align: center;
+        overflow: hidden;
+        display: none;
+      }
+
+      .purchase {
+        margin-top: 15px;
+        text-align: center;
+        display: none;
+        a {
+          color: @main-color-white;
+          font: @font-body;
+          font-weight: 700;
+          text-decoration: none;
+          &:after {
+            content: "";
+            display: inline-block;
+            background: url("@{images}/triangle.png") no-repeat;
+            width: 7px;
+            height: 13px;
+            margin-left: 7px;
+          }
+        }
+      }
+    }
+    @media @ipad-size {
+      display: none;
+    }
+  }
+  
+  
+  #slider-program-container {
+    display: none;
+    position: relative; 
+    top: 0px; 
+    left: 0px; 
+    width: 400px;
+    height: 200px;
+    margin: auto;
+    .header {
+      height: 5px;
+      top: 0;
+      left: 0;
+      position: absolute;
+      &.onshore{
+        background: @course-onshore;
+      }
+      &.crude-rail {
+        background: @course-cure-rail;
+      }
+      &.operator {
+        background: @course-operator;
+      }
+      &.service-station {
+        background: @course-service-station;
+      }
+    }
+    img {
+      z-index: -1;
+    }
+    .title {
+      padding-top: 5px;
+      color: @main-color-white;
+      z-index: 100;
+    }
+    .slider-group {
+      position: absolute; 
+      overflow: hidden; 
+      left: 0px;
+      top: 0px;  
+      width: 100%;
+      height: 200px;
+      margin: auto;
+    }
+    .bullet {
+      position: fixed; 
+      bottom: -30px; 
+    }
+    .bullet div, .bullet div:hover, .bullet .av {
+      background: url("@{images}/bullet.png") no-repeat;
+      overflow:hidden;
+    }
+    .bullet div, .bullet div:hover, .bullet .av:hover, .bullet .dn, .bullet .dn:hover { 
+      background-position: 5px 5px; 
+    }
+    .bullet .av { 
+      background-position: -18px 5px; 
+    }
+    .bullet-content {
+      position: absolute; 
+      width: 21px; 
+      height: 21px; 
+      text-align:center; 
+      line-height:21px; 
+    }
+    @media @ipad-size {
+      display: block;
+    }
+  }
+  
+
+  /* Courses types (image and color) */
+  .program {
+    /*default program image and color */
+    background: url("@{images}/e-p-onshore.png");
+    background-size: cover;
+    .header {
+      background-color: @course-onshore;
+    }
+
+    /*specific type program image and color */
+    &.onshore {
+      background: url("@{images}/e-p-onshore.png");
+      .header {
+        background-color: @course-onshore;
+      }
+    }
+    &.crude-rail {
+      background: url("@{images}/crude-by-rail.png");
+      .header {
+        background-color: @course-cure-rail;
+      }
+    }
+    &.operator {
+      background: url("@{images}/operator.png");
+      .header {
+        background-color: @course-operator;
+      }
+    }
+    &.service-station {
+      background: url("@{images}/service-station.png");
+      .header {
+        background-color: @course-service-station;
+      }
+    }
+  }
+  /* slider zone */
+  #slider-program-container {
+    img {
+      /*default program image 
+      content: url("@{images}/service-station.png");*/
+
+      /* specific program image */
+      &.onshore {
+        content: url("@{images}/e-p-onshore.png");
+      }
+      &.crude-rail {
+        content: url("@{images}/crude-by-rail.png");
+      }
+      &.operator {
+        content: url("@{images}/operator.png");
+      }
+      &.service-station {
+        content: url("@{images}/service-station.png");
+      }
+    }
+  }
+}
+
+

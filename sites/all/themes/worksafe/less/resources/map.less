@@ -1,0 +1,128 @@
+body.page-api-map {
+  
+  /* legend */
+  .jvectormap-legend-cnt {
+    .jvectormap-legend-bg {
+      font: @font-menu;
+      color: #464646;
+      font-weight: 700;
+      background: @main-color-light;
+      border: 2px solid @main-color-dark;
+      padding: 0;
+      margin: 0;
+      .border-radius(0);
+      /* Title */
+      .jvectormap-legend-title {
+        display:none;
+        /*
+        font: @font-body-table;
+        color: @main-color-light;
+        background: @main-color-dark;
+        padding: 10px;
+        text-transform: uppercase;
+        */
+      }
+      /* content */
+      .jvectormap-legend-inner {
+        > div {
+          padding: 15px 15px 0 8px;
+          &:last-child {
+            height: 0;
+          }
+        }
+        .jvectormap-legend-tick-sample {
+          .border-radius(50%);
+        }
+        .jvectormap-legend-tick-text {
+          font: @font-body;
+          font-size: 14px;
+          padding-left: 8px;
+        }
+      }
+    }
+    @media @small-size {
+      top: 430px !important;
+      left: 2.5%;
+      width: 95%;
+      z-index: -1;
+    }
+  }
+  /* end legend */
+  
+  .jvectormap-container {
+    @media @small-size {
+      position: initial;
+    }
+  }
+  
+  /* popup */
+  .jvectormap-tip {
+    font: @font-body; 
+    background: @main-color-dark;
+    border: solid 1px @main-color-table;
+    padding: 4px 10px;
+  }
+  
+  /* MAP */
+  #api-usa-map {
+    @media @middle-size {
+      text {
+        font-size: 8px;
+      }
+    }
+    @media @small-size {
+      height: 300px !important;
+      text {
+        display: none;
+      }
+    }    
+  }
+  
+  /* Select states */
+  .form-item-states-list {
+    text-align: center;
+    display: none;
+    @media @small-size {
+      display: block;
+      select {
+        width: 95%
+      }
+    }
+  }
+  
+  /* State details */
+  .us-state-row {
+    color: @main-color-dark;
+    width: 80%;
+    margin: 80px auto 0 auto;
+    background: @main-color-light;
+    padding: 40px 60px 20px 60px;
+    .box-sizing(border-box);
+
+    .field-label {
+      float: left;
+      font: @font-body-table;
+      font-weight: 500;
+      padding-right: 10px;
+    }
+
+    /*
+    .field-name-field-state-additional-info {
+      margin-top: 40px;
+      .field-label {
+        display: none;
+      }
+    }*/
+
+    a {
+      cursor: pointer;
+      color: @main-color-orange;
+      font-weight: 300;
+    }
+
+    @media @small-size {
+      width: 100%;
+      padding: 25px 20px;
+    }
+  }
+}

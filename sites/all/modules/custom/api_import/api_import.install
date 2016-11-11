@@ -1,0 +1,53 @@
+<?php
+
+/**
+ * @file
+ * Installation code for api_import module
+ */
+function api_import_enable() {
+  Migration::registerMigration('ApiUsers');
+  Migration::registerMigration('ApiCompanies');
+  //Migration::registerMigration('ApiWorkType');
+  Migration::registerMigration('ApiPercentagePromoCodes');
+  Migration::registerMigration('ApiFixedPromoCodes');
+  Migration::registerMigration('ApiPrograms');
+  Migration::registerMigration('ApiSafetyKeys');
+  Migration::registerMigration('ApiTokens');
+}
+
+/**
+ * Implements hook_disable().
+ */
+function api_import_disable() {
+  Migration::deregisterMigration('ApiUsers');
+  Migration::deregisterMigration('ApiCompanies');
+  //Migration::deregisterMigration('ApiWorkType');
+  Migration::deregisterMigration('ApiPercentagePromoCodes');
+  Migration::deregisterMigration('ApiFixedPromoCodes');
+  Migration::deregisterMigration('ApiPrograms');
+  Migration::deregisterMigration('ApiSafetyKeys');
+  Migration::deregisterMigration('ApiTokens');
+}
+
+/*
+ * Register Promo codes migrations
+ */
+function api_import_update_7001() {
+  Migration::registerMigration('ApiPercentagePromoCodes');
+  Migration::registerMigration('ApiFixedPromoCodes');
+}
+
+/*
+ * Register Promo codes migrations
+ */
+function api_import_update_7002() {
+  Migration::registerMigration('ApiPrograms');
+  Migration::registerMigration('ApiSafetyKeys');
+}
+
+/*
+ * Register Tokens migration
+ */
+function api_import_update_7003() {
+  Migration::registerMigration('ApiTokens');
+}

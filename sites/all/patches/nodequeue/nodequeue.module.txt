@@ -1,0 +1,5 @@
+SQL Server aggregate function compatibility
+
+PDOException: SQLSTATE[42000]: [Microsoft][SQL Server Native Client 11.0][SQL Server]Column 'nodequeue_subqueue.qid' is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause.: SELECT s.*, COUNT(n.position) AS count, s.sqid AS _field_0 FROM {nodequeue_subqueue} s LEFT OUTER JOIN {nodequeue_nodes} n ON n.sqid = s.sqid WHERE ( (( ([s].[qid] = :db_condition_placeholder_0) AND ([s].[reference] IN (:db_condition_placeholder_1)) )) ) GROUP BY s.sqid; Array ( [:db_condition_placeholder_0] => 5 [:db_condition_placeholder_1] => 5 ) in nodequeue_load_subqueues_by_reference() (line 794 of C:\development\fas\docroot\sites\all\modules\contrib\nodequeue\nodequeue.module).
+
+https://www.drupal.org/node/1992262

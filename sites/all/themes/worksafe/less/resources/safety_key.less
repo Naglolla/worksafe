@@ -1,0 +1,160 @@
+body.page-user-safety-keys,
+body.page-safety-key-company {
+  
+  .region-content-inner {
+    width: 70%;
+    margin: auto;
+    @media @middle-size {
+      width: 90%;
+    }
+    @media @small-size {
+      width: 100%;
+    }
+  }
+  
+  div.item-list {
+    a {
+      .button;
+      .button.primary;
+    }
+    
+    ul {
+      background: @main-color-light;
+      margin-top: 40px;
+      padding: 40px;
+      li {
+        font: @font-body-button;
+        color: @main-color-dark;
+        line-height: 30px;
+        margin: 0;
+        div:not(.views-field) {
+          display: inline;
+        }
+      }
+      
+      @media @small-size {
+        margin-top: 15px;
+        padding: 20px;
+      }
+    }
+  }
+}
+
+// Safety key search page
+body.page-search-safety-key {
+  #block-system-main {
+    width: 70%;
+    margin: auto;
+    .safety-key-help-text {
+      text-align: center;
+      font: @font-body-info;
+      color: @main-color-soft;
+      padding: 0 30px 50px 30px;
+    }
+    #edit-number-wrapper {
+      float: none;
+      margin: 10px 0;
+      padding-right: 0;
+      label {
+        text-transform: capitalize;
+        font: @font-body-button;
+        color: @main-color-dark;
+        font-weight: 500;
+        display: inline-block;
+        width: 30%;
+        @media @small-size {
+          display: block;
+          width: 100%;
+        }
+      }
+      div.views-widget {
+        display: inline-block;
+        width: 68%;
+        #edit-number {
+          width: 100%
+        }
+      }
+      @media @small-size {
+        text-align: center;
+        margin: 0;
+        padding-bottom: 20px;
+      }
+    }
+    
+    .views-submit-button {
+      width: 100%;
+      padding: 0;
+      #edit-submit-safety-keys {
+        
+        @media @small-size {
+          margin-left: 0;
+          width: 100%;
+        }
+      }
+    }
+    // emty result
+    .view-empty {
+      color: @main-color-dark;
+      font: @font-body-button;
+      font-weight: 500;
+      text-align: center;
+      background: @main-color-light;
+      margin: 50px auto;
+      padding: 40px;
+    }
+    
+    // safety kery result
+    .view-content {
+      background: @main-color-light;
+      margin-top: 50px;
+      padding: 40px;
+      ul,li {
+        margin: 0;
+      }
+      li > *:not(:last-child):not(span) {
+        margin-bottom: 10px;
+      }
+      span {
+        color: @main-color-dark;
+        font: @font-body-button;
+        font-weight: 500;
+        &.field-content {
+          font-weight: 300;
+        }
+        @media @small-size {
+          display:block;
+        }
+      }
+      div.field, div > div {
+        display: inline-block;
+        color: @main-color-dark;
+        font: @font-body-button; 
+        font-weight: 300;
+      }
+      div.field-item {
+        color: @main-color-dark;
+        font: @font-body-button; 
+        span {
+          font-weight: 300;
+          @media @small-size {
+            display:block;
+          }
+        }
+      }
+      .views-row-first > div:first-child > span:last-child {
+        font-weight: 300;
+        @media @small-size {
+          display:block;
+        }
+      }
+      @media @small-size {
+        padding: 30px;
+        text-align: center;
+      }
+    }
+   
+    @media @small-size {
+      width: 100%;
+    }
+  }
+}

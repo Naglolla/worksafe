@@ -1,0 +1,22 @@
+#block-locale-language {
+  text-align: right;
+  ul.language-switcher-locale-url {
+    margin-bottom: 0;
+    li {
+      display: inline;
+      line-height: 30px;
+      a {
+        font: @font-header-navigator;
+        text-decoration: none;
+        color: @main-color-dark;
+      }
+      a.active {
+          font-weight: 700;
+      }
+      
+    }
+    li:not(:last-child):after {
+      content: ' | ';
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Features Users feature.
+ */
+
+include_once 'api_features_users.features.inc';

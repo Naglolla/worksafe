@@ -1,0 +1,253 @@
+<?php
+
+/**
+ * Query Moodle database for courses.
+ *
+ * @return array
+ *   Array of data about each course.
+ */
+function api_moodle_courselist_get_courselist() {
+
+    $moodle_con = moodle_connector_connect();
+    if (!$moodle_con) {
+      return array();
+    }
+
+    $query = "SELECT idnumber, fullname FROM {course} WHERE id > 1";
+
+    $res = $moodle_con->query($query);
+    if (!$res) {
+      return array();
+    }
+    return $res->fetchAll();
+}
+
+/**
+ * Get course name by sku and ramdom number
+ * @return string
+ */
+function api_moodle_courselist_get_course_name($sku) {
+    $id = explode('|', $sku)[0];
+    $moodle_con = moodle_connector_connect();
+    if (!$moodle_con) {
+      return $sku;
+    }
+
+    $res = $moodle_con->query("SELECT fullname FROM {course} WHERE idnumber = :id", array(
+        ':id'  => $id
+    ));
+    if (!$res) {
+      return $sku;
+    }
+
+    $fetch = $res->fetchAll();
+    if(sizeof($fetch) > 0)
+        return $fetch[0]->fullname;
+    else
+        return $sku;
+}
+
+/**
+ * Make unique id
+ * format <courseId>|<random>
+ */
+function makeUniqueId($idnumber){
+    return $idnumber.'|'.rand(10000,99999);
+}
+
+/**
+ * Format course objet to option array
+ */
+function format_options($courses) {
+    $array = array();
+    foreach ($courses as $c) {
+        $array[makeUniqueId($c->idnumber)] = $c->fullname;
+    }
+    return $array;
+}
+
+/**
+ * Hook form alter
+ */
+function api_moodle_courselist_form_alter(&$form, $form_state, $form_id) {
+    if ($form_id == 'product_display_node_form') {
+        $form['#validate'][] = 'api_moodle_courselist_product_display_node_form_validate';
+
+        $form['field_product'][LANGUAGE_NONE]['actions']['ief_add']['#value'] = t('Add new Course');
+    }
+    if ($form_id == 'product_display_node_form' &&
+            !empty($form['field_product']['und']['form'])) {
+
+        $courses = api_moodle_courselist_get_courselist();
+
+        $offers = array(
+            '_none' => t('- Select a value -'),
+            makeUniqueId(4) => 'Full Course + Exam',
+            makeUniqueId(5) => 'All Modules',
+        );
+        $options = $offers + format_options($courses);
+        $form['field_product']['und']['form']['sku']['#type'] = 'select';
+        $form['field_product']['und']['form']['sku']["#description"] = '';
+        $form['field_product']['und']['form']['sku']['#title'] = 'Course';
+        $form['field_product']['und']['form']['sku']['#options'] = $options;
+        $form['field_product']['und']['form']['sku']['#default_value'] = t('Select Course');
+        $form['field_product']['und']['form']['field_states']['und']['#multiple'] = FALSE;
+    }
+    if ($form_id == 'product_display_node_form' &&
+            !empty($form['field_product']['und']['entities']['0']['form']['sku'])){
+        $form['field_product']['und']['entities']['0']['form']['sku']['#access'] = false;
+    }
+    if ($form_id == 'product_display_node_form'){
+        unset($form["field_product"]['und']['entities']['#table_fields']['title']);
+        $form["field_product"]['und']['entities']['#table_fields']['sku']['label'] = t('Course name');
+    }
+    if ($form_id == 'product_display_node_form' || $form_id == 'commerce_product_ui_product_form'){
+        $form['#attached']['js'] = array(
+            drupal_get_path('module', 'api_moodle_courselist') . '/js/api_moodle_courselist.js' => array(
+            'type' => 'file',
+            ),
+        );
+    }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function api_moodle_courselist_form_commerce_product_ui_product_form_alter(&$form, $form_state, $form_id) {
+    $form['sku']['#access'] = false;
+    $form['#validate'][] = 'api_moodle_courselist_form_commerce_product_validate';
+
+    //add rules checker js on product form
+    $form['#attached']['js'][] = array(
+      'data' => drupal_get_path('module', 'api_moodle_courselist') . '/js/api_moodle_courselist_rules_check.js',
+	    'type' => 'file',
+	  );
+    $form['#attached']['js'][] = array(
+      'data' => array('course_type_all_modules' => MOODLE_COURSE_TYPE_ALL_MODULES,
+                      'course_type_full_course' => MOODLE_COURSE_TYPE_FULL_COURSE),
+      'type' => 'setting',
+    );
+}
+function api_moodle_courselist_form_commerce_product_validate(&$form, &$form_state) {
+    $values = &$form_state['values'];
+    if (in_array($values['field_course_type'][LANGUAGE_NONE][0]['value'], array(4, 5, 6))) {
+        $values['field_module_number'][LANGUAGE_NONE][0]['value'] = $values['field_course_type'][LANGUAGE_NONE][0]['value'] * 1000;
+    }
+}
+function api_moodle_courselist_product_display_node_form_validate(&$form, &$form_state) {
+    $values = &$form_state['values'];
+    if (in_array($values['field_product'][LANGUAGE_NONE]['form']['field_course_type'][LANGUAGE_NONE][0]['value'], array(4, 5, 6))) {
+        $values['field_product'][LANGUAGE_NONE]['form']['field_module_number'][LANGUAGE_NONE][0]['value'] = $values['field_product'][LANGUAGE_NONE]['form']['field_course_type'][LANGUAGE_NONE][0]['value'] * 1000;
+    }
+
+    //blank operator type if state is not set
+    if (!empty($values['field_product'][LANGUAGE_NONE]['entities'])) {
+      //editing a product
+      $entities = &$values['field_product'][LANGUAGE_NONE]['entities'];
+      foreach ($entities as $i => &$entity) {
+        if (!empty($entity['form'])) {
+          $product_form = &$entity['form'];
+          break;
+        }
+      }
+    }
+    else {
+      //creating a new one
+      $product_form = &$values['field_product'][LANGUAGE_NONE]['form'];
+    }
+
+    if (empty($product_form['field_states'][LANGUAGE_NONE][0]['value'])) {
+      $product_form['field_operator_types'][LANGUAGE_NONE][0]['value'] = NULL;
+    }
+
+}
+
+function api_moodle_courselist_inline_entity_form_table_fields_alter(&$fields, $context) {
+    // Make sure there's a stock field on each of the allowed product types.
+    $is_product = FALSE;
+    foreach ($context['allowed_bundles'] as $bundle) {
+      if ($bundle=='product') {
+        $is_product = TRUE;
+      }
+    }
+
+    if ($is_product) {
+      unset($fields['field_images']);
+      unset($fields['status']);
+      unset($fields['sku']);
+      unset($fields['title']);
+      $fields['field_states'] = array(
+        'type' => 'field',
+        'label' => t('State'),
+        'weight' => 0,
+      );
+      $fields['field_operator_types'] = array(
+        'type' => 'field',
+        'label' => t('Operator Type'),
+        'weight' => 1,
+      );
+      $fields['field_course_type'] = array(
+        'type' => 'field',
+        'label' => t('Course Type'),
+        'weight' => 2,
+      );
+      $fields['title_field'] = array(
+        'type' => 'field',
+        'label' => t('Title'),
+        'weight' => 3,
+        'process' => 'text_plain'
+      );
+
+    }
+}
+
+/**
+ * Implements hook_inline_entity_form_entity_form_alter().
+ * Add rules checker js on inline product form.
+ */
+function api_moodle_courselist_inline_entity_form_entity_form_alter(&$entity_form, &$form_state) {
+
+  if ($entity_form['#entity_type'] == 'commerce_product' &&
+          $entity_form['#entity']->type != 'token') {
+
+    //Changing some labels to replace "product" with "course"
+    $entity_form['#title'] = t('Add new course');
+    if (!empty($entity_form['actions']['ief_add_save'])) {
+      $entity_form['actions']['ief_add_save']['#value'] = t('Create course');
+    }
+
+    if (!empty($entity_form['actions']['ief_edit_save'])) {
+      $entity_form['actions']['ief_edit_save']['#value'] = t('Update course');
+    }
+
+
+    $entity_form['#attached']['js'][] = array(
+      'data' => drupal_get_path('module', 'api_moodle_courselist') . '/js/api_moodle_courselist_rules_check.js',
+	    'type' => 'file',
+	  );
+    $entity_form['#attached']['js'][] = array(
+      'data' => array('course_type_all_modules' => MOODLE_COURSE_TYPE_ALL_MODULES,
+                      'course_type_full_course' => MOODLE_COURSE_TYPE_FULL_COURSE),
+      'type' => 'setting',
+    );
+
+    $entity_form['field_states']['und']['#multiple'] = FALSE;
+    $entity_form['field_states']['und']['#chosen'] = FALSE;
+    $entity_form['field_operator_types']['und']['#chosen'] = FALSE;
+  }
+}
+
+/**
+ * Implements hook_entity_presave().
+ *
+ * Blank the operator type if we are not saving a state on a product.
+ * This works only when editing the product not inside a product display (IEF).
+ */
+function api_moodle_courselist_entity_presave($entity, $type) {
+  if ($type == 'commerce_product') {
+    $state = _api_custom_field_item($type, $entity, 'field_states', 'value');
+    if (empty($state)) {
+      $entity->field_operator_types[LANGUAGE_NONE] = array();
+    }
+  }
+}

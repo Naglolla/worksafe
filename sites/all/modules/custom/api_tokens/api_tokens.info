@@ -1,0 +1,5 @@
+name = API Tokens
+description = API Tokens funcionality.
+packege = API Custom
+files[] = api_tokens.pages.inc
+core = 7.x

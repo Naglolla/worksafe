@@ -1,0 +1,375 @@
+<?php
+
+/**
+ * @file
+ * Defines program pages and shopping functionality.
+ */
+
+define('PRODUCT_DISPLAY_CONTENT_TYPE', 'product_display');
+define('REGULATORY_QUESTIONS_ENTITY', 'regulatory_questions');
+
+/**
+ * Implements HOOK_menu().
+ */
+function api_programs_menu() {
+  $items['program/%node/buy'] = array(
+    'title callback'   => 'node_page_title',
+    'page callback'    => 'api_programs_buy_page',
+    'page arguments'   => array(1),
+	'access callback' => TRUE,
+	'file' => 'api_programs.pages.inc',
+	'type' => MENU_NORMAL_ITEM,
+
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function api_programs_theme($existing, $type, $theme, $path) {
+	return array(
+	    'api_programs_program_description' => array(
+			'template'  => 'api-programs-program-description',
+			'path' => $path . '/templates',
+			'variables' => array(
+				'title' => '',
+				'description' => '',
+				'image' => '',
+				'number_of_modules' => '',
+				'completion_time' => '',
+				'price_range' => '',
+				'handbook_uri' => '',
+				'handbook_filesize' => '',
+				'program_form' => '',
+			),
+	    ),
+	);
+}
+
+/**
+ * Get available states in a program.
+ *
+ * @param $program
+ *   A program object or nid
+ */
+function api_programs_get_program_states($program) {
+	if (is_numeric($program)) {
+		$program = node_load($program);
+	}
+	$states = array();
+	$products_nids = _get_program_products_id($program);
+	if (!empty($products_nids)) {
+
+		$query = db_select('field_data_field_states', 'fs')->distinct();
+		$query->fields('fs', array('field_states_value'))
+		->condition('entity_type', 'commerce_product')
+		->condition('entity_id', $products_nids);
+		$result = $query->execute()->fetchAllKeyed(0, 0);
+
+		$states = _api_custom_get_us_states();
+		$states = array_intersect_key($states, $result);
+	}
+	return $states;
+}
+
+/**
+ * Callback for service getStateOperators. Get state's operator types.
+ *
+ * @param $program
+ *   A program object or nid.
+ * @param $state
+ *   A state name.
+ */
+function api_programs_get_state_operator_types($program, $state) {
+	// Available operator types, empty by default.
+	$operator_types = array();
+
+	if (is_numeric($program)) {
+		// Load program node.
+		$program = node_load($program);
+	}
+	// Get program products.
+	$products_nids = _get_program_products_id($program);
+
+	if (!empty($products_nids)) {
+		// Get state products id.
+		$query = db_select('field_data_field_states', 'fs')->distinct();
+		$query->fields('fs', array('entity_id'))
+		->condition('entity_type', 'commerce_product')
+		->condition('entity_id', $products_nids)
+		->condition('field_states_value', $state);
+		$products = $query->execute()->fetchAllKeyed(0, 0);
+
+		if (!empty($products)) {
+			// Get operator types.
+			$ot_query = db_select('field_data_field_operator_types', 'fot')->distinct();
+			$ot_query->fields('fot', array('field_operator_types_value'))
+			->condition('entity_type', 'commerce_product')
+			->condition('entity_id', $products)
+			->orderBy('field_operator_types_value');
+			$operator_types = $ot_query->execute()->fetchAllKeyed(0, 0);
+			// Move A+B to the beginning.
+			if (!empty($operator_types['A+B'])) {
+				unset($operator_types['A+B']);
+				$operator_types = array('A+B' => 'A+B') + $operator_types;
+			}
+		}
+	}
+
+	return $operator_types;
+}
+
+
+/**
+ * Callback for service getProgramCourses.
+ *
+ * @param $program
+ *   A program object or nid.
+ * @param $state
+ *   A state name.
+ * @param $operator_type
+ *   An operator type.
+ */
+function api_programs_get_program_courses($program, $state, $operator_type, $modules = NULL){
+
+	if (is_null($state)) {
+		$state = 'NA';
+	}
+	if (is_null($operator_type)) {
+		$operator_type = 'NA';
+	}
+	if (is_numeric($program)) {
+		// Load program node.
+		$program = node_load($program);
+	}
+	// We do this beacuse an issue with javascript.
+	if ($operator_type == 'AB') {
+		$operator_type = 'A+B';
+	}
+
+  if (empty($modules)) {
+  	$modules = api_moodle_get_program($program->nid);
+  }
+
+	foreach ($modules->modules[$state][$operator_type] as $module_number => &$products) {
+		foreach ($products as $product_type => &$product) {
+			$us_states = array_map('reset', $product->states);
+			$ot = array_map('reset', $product->operator_types);
+
+			if (!in_array($state, $us_states) || !in_array($operator_type, $ot)) {
+				unset($products[$product_type]);
+			}
+
+		}
+		if (empty($products)) {
+			unset($modules->modules[$state][$operator_type][$module_number]);
+		}
+	}
+
+	return $modules->modules[$state][$operator_type];
+}
+
+/**
+ * Get products ids.
+ *
+ * @param $program
+ *   A program node object.
+ */
+function _get_program_products_id($program) {
+	$products = _api_custom_field_item('node', $program, 'field_product', 'product_id', NULL);
+	$products_ids = array_map('reset', $products);
+	return $products_ids;
+}
+
+/**
+ * Implements of hook_services_resources().
+ */
+function api_programs_services_resources() {
+  return array(
+    'api_programs' => array(
+      'actions' => array(
+        'getStateOperators' => array(
+          'access callback' => 'api_programs_resource_retrieve_access',
+          'help' => 'Returns program state operator.',
+          'callback' => 'api_programs_get_state_operator_types',
+          'args' => array(
+            array(
+              'name' => 'program',
+              'optional' => FALSE,
+              'source' => array('data' => 'program'),
+              'description' => t('Program node id.'),
+              'type' => 'string',
+            ),
+            array(
+              'name' => 'state',
+              'optional' => FALSE,
+              'source' => array('data' => 'state'),
+              'description' => t('State name.'),
+              'type' => 'string',
+            ),
+          ),
+        ),
+        'getProgramCourses' => array(
+          'access callback' => 'api_programs_resource_retrieve_access',
+          'help' => 'Returns program state operator.',
+          'callback' => 'api_programs_get_program_courses',
+          'args' => array(
+            array(
+              'name' => 'program',
+              'optional' => FALSE,
+              'source' => array('data' => 'program'),
+              'description' => t('Program node id.'),
+              'type' => 'string',
+            ),
+            array(
+              'name' => 'state',
+              'optional' => FALSE,
+              'source' => array('data' => 'state'),
+              'description' => t('State name.'),
+              'type' => 'string',
+            ),
+            array(
+              'name' => 'operator',
+              'optional' => FALSE,
+              'source' => array('data' => 'operator'),
+              'description' => t('Operator type.'),
+              'type' => 'string',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * Services access.
+ */
+function api_programs_resource_retrieve_access() {
+  return user_access('access content');
+}
+
+/**
+ * Implements hook_node_view()
+ */
+function api_programs_node_view($node, $view_mode, $langcode) {
+	// Redirect program views to purchase page.
+	if ($node->type == PRODUCT_DISPLAY_CONTENT_TYPE && $view_mode == 'full') {
+		drupal_goto('program/' . $node->nid . '/buy');
+	}
+}
+
+/**
+ * Implements hook_views_api().
+ *
+ * Used for enabling using templates inside my module
+ */
+function api_programs_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'api_programs'),
+    'template path' => drupal_get_path('module', 'api_programs') . '/templates',
+  );
+}
+
+function api_programs_get_programs(){
+  $programs = &drupal_static(__FUNCTION__);
+  if (!isset($programs)) {
+    $nodes = node_load_multiple(array(), array(
+        'type' => 'product_display',
+        //'nid' =>$program_id,
+        'status' => 1)
+    );
+
+    if (!$nodes){
+      return FALSE;
+    }
+
+    $programs = array();
+
+    foreach ($nodes as $node) {
+      $program = new stdClass();
+      $program->title = $node->title;
+      $program->program_id = $node->nid;
+      $program->program_color = isset($node->field_program_color[LANGUAGE_NONE][0]['rgb']) ? $node->field_program_color[LANGUAGE_NONE][0]['rgb']:'#FF6600';
+      $programs[] = $program;
+    }
+  }
+  return $programs;
+}
+
+function api_programs_init(){
+  //drupal_match_path
+
+  $programs = api_programs_get_programs();
+
+  foreach ($programs as $program) {
+    // programs
+    drupal_add_css(
+        'body.page-programs .section-content .block-system-main .view-content .views-row.program-'.$program->program_id.' { border-top-color: '. $program->program_color .';}',
+      array(
+        'group' => CSS_THEME,
+        'type' => 'inline',
+        'media' => 'all',
+        'preprocess' => FALSE,
+        'weight' => '9999',
+      )
+    );
+    // program/ID/buy
+    drupal_add_css(
+        'body.page-program-buy.page-program-'.$program->program_id.' form#api-programs-buy-form .form-item-state:before,' .
+        'body.page-program-buy.page-program-'.$program->program_id.' form#api-programs-buy-form .form-item-operator-type:before,' .
+        'body.page-program-buy.page-program-'.$program->program_id.' form#api-programs-buy-form .form-item-courses:before,' .
+        'body.page-program-buy.page-program-'.$program->program_id.' form#api-programs-buy-program-form .form-item-courses:before' .
+        ' { background-color: '. $program->program_color .';}',
+      array(
+        'group' => CSS_THEME,
+        'type' => 'inline',
+        'media' => 'all',
+        'preprocess' => FALSE,
+        'weight' => '9999',
+      )
+    );
+    drupal_add_css(
+        'body.page-program-buy.page-program-'.$program->program_id.' .program-info .long-description { border-bottom-color: '. $program->program_color .';}',
+      array(
+        'group' => CSS_THEME,
+        'type' => 'inline',
+        'media' => 'all',
+        'preprocess' => FALSE,
+        'weight' => '9999',
+      )
+    );
+  }
+}
+
+function api_programs_preprocess_views_view(&$vars) {
+  $view = &$vars['view'];
+  // Make sure it's the correct view
+  if ($view->name == 'programs') {
+    // add needed javascript to program list page.
+    drupal_add_js(drupal_get_path('module', 'api_programs') . '/js/api_programs_page.js');
+  }
+}
+
+function api_programs_get_user_by_program($program_id){
+  $items_ids = array();
+  $items_entity = entity_load('commerce_line_item', $items_ids,array('type' =>'product'));
+
+  $orders_ids = array();
+  foreach ($items_entity as $item_entity) {
+    if ($program_id && $item_entity->data['context']['entity']['entity_id'] == $program_id){
+      array_push($orders_ids,$item_entity->order_id);
+    }
+  }
+  $orders_ids = array_unique($orders_ids);
+  $orders = entity_load('commerce_order', $orders_ids, array('status'=>array('pending','processing','completed')), FALSE);
+
+  $uids = array();
+  foreach ($orders as $order) {
+    array_push($uids,$order->uid);
+  }
+
+  return array_unique($uids);
+}

@@ -1,0 +1,169 @@
+body.page-directory-search {
+  #block-system-main {
+
+    h2 {
+      font: @font-body-title;
+      color: @main-color-dark;
+      text-align: center;
+      text-transform: uppercase;
+      margin: 0 0 50px 0;
+      @media @small-size {
+        font: @font-body-sub-title;
+      }
+    }
+    
+    .directory-help-text {
+      text-align: center;
+      font: @font-body-info;
+      color: @main-color-soft;
+      padding: 0 30px 50px 30px;
+    }
+    .view-content {
+      width: 90%;
+      margin: auto;
+      @media @small-size {
+          width: 100%;
+      }
+    }
+    .views-exposed-widgets {
+        margin-bottom: 80px;
+      .column-1 {
+        width: 50%;
+        float: left;
+        border-right: 1px solid @main-color-dark;
+        @media @middle-size {
+          width: 100%;
+          float: none;
+          border-right: 0;
+          margin-bottom: 20px;
+        }
+      }
+      .column-2 {
+        width: 49%;
+        float: right;
+        @media @middle-size {
+          width: 100%;
+          float: none;
+        }
+      }
+      @media @small-size {
+        margin-bottom: 30px;
+      }
+    }
+    #views-exposed-form-directory-directory-search {
+      .views-exposed-form .views-exposed-widget {
+        float: none;
+        padding: 0;
+        margin: 1em auto;
+        width: 80%;
+        label {
+          width: 30%;
+          display: inline-block;
+          vertical-align: middle;
+          @media all and (max-width:1100px) {
+            width: 100%;
+            text-align: center;
+            display: block;
+          }
+          @media @small-size {
+            display: block;
+            width: 100%;
+          }
+        }
+        div.form-item {
+          width: 68%;
+          display: inline-block;
+          @media all and (max-width:1100px) {
+            display: block;
+            width: 100%;
+          }
+          @media @small-size {
+            display: block;
+            width: 100%;
+          }
+        }
+        input[type="submit"]{
+          width: 100%;
+        }
+        input:not([type="submit"]), div.chosen-container {
+          width: 100% !important;
+          @media @small-size {
+            width: 90% !important;
+          }
+        }
+        @media @small-size {
+          width: 100%;
+        }
+      }
+      @media @small-size {
+        text-align: center;
+      }
+    }
+    .views-submit-button {
+      text-align: right;
+      #edit-submit-directory {
+        @media @middle-size {
+          width: 100%;
+          padding: 14px 0;
+          margin-bottom: 30px;
+        }
+      }
+      @media @small-size {
+        width: 100%;
+        padding: 0;
+      }
+    }
+    
+    .feed-icon {
+      a {
+        margin-left: 5%;
+        .button;
+        .button.primary;
+        @media @small-size {
+          width: 100%;
+          padding: 5px 0;
+          margin-left: 0;
+        }
+      }
+      @media @small-size {
+        width: 100%;
+      }
+    }
+    
+    // no result
+    .view-empty{
+      color: @main-color-dark;
+      font: @font-body-button;
+      font-weight: 500;
+      text-align: center;
+      background: @main-color-light;
+      margin: 50px auto 0 auto;
+      padding: 40px;
+      width: 85%;
+      @media @middle-size {
+        width: 70%;
+      }
+      @media @small-size {
+        width: initial;
+      }
+    }
+    
+    //paginator
+    div.item-list {
+      margin-right: 5%;
+      @media @small-size {
+        float: none;
+        margin-right: 0;
+        margin-bottom: 20px;
+        text-align: center;
+        ul.pager {
+          display: inline-block;
+        }
+      }
+    }
+    
+    @media @small-size {
+      width: 100%;
+    }
+  }
+}

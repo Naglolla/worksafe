@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Feature Feeds feature.
+ */
+
+include_once 'api_feature_feeds.features.inc';

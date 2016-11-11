@@ -1,0 +1,22 @@
+# Spanish translation of Views Excel Export (7.x-1.0)
+# Copyright (c) 2012 by the Spanish translation team
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Views Excel Export (7.x-1.0)\n"
+"POT-Creation-Date: 2012-09-22 17:35+0000\n"
+"PO-Revision-Date: YYYY-mm-DD HH:MM+ZZZZ\n"
+"Language-Team: Spanish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n!=1);\n"
+
+msgid "Views"
+msgstr "Vistas"
+msgid ""
+"The filename that will be suggested to the browser for downloading "
+"purposes. %view will be replaced with the view name."
+msgstr ""
+"El nombre de archivo que se sugerirá en el explorador para fines de "
+"descarga. %view se remplazará con el nombre de la vista."

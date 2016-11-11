@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Ferature Views feature.
+ */
+
+include_once 'api_ferature_views.features.inc';

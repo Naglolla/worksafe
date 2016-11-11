@@ -1,0 +1,50 @@
+<?php
+/**
+ * Implements HOOK_install().
+ */
+function api_users_install() {
+  api_users_update_7001();
+  api_users_update_7002();
+}
+/**
+ * Make api_users heavier than commerce_kickstart_user to avoid issues with form alter.
+ */
+function api_users_update_7001() {
+   $rec = db_update('system')
+          ->fields(array('weight' => 1))
+          ->condition('type', 'module')
+          ->condition('name', 'api_users')
+          ->execute();
+   
+   if (!empty($rec)) {
+     $ret = array(
+       'success' => TRUE,
+       'query' => 'api_users weight set correctly.',
+     );
+   }
+   else {
+     $ret = array(
+       'success' => FALSE,
+       'query' => 'There was a problem setting api_users weight',
+     );
+   }
+   
+   return $ret;
+}
+/**
+ * Enable captcha in user registration form.
+ */
+function api_users_update_7002() {
+  // Is captcha module enable?
+  if (module_exists('captcha')) {
+    db_merge('captcha_points')
+      ->key(array('form_id' => 'user_register_form'))
+      ->fields(array(
+        'form_id' => 'user_register_form',
+        'module' => NULL,
+        'captcha_type' => 'default',
+
+      ))
+      ->execute();
+  }
+}

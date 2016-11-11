@@ -1,0 +1,316 @@
+<?php
+
+/**
+ * @file
+ * Provides Commerce integration with Moodle.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function commerce_moodle_menu() {
+    $items['admin/commerce/config/moodle'] = array(
+      'title' => 'Commerce Moodle Integration settings',
+      'description' => 'Set Moodle product types',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('commerce_moodle_admin_settings'),
+      'access arguments' => array('administer checkout'),
+      'file' => 'commerce_moodle.admin.inc',
+    );
+    return $items;
+}
+
+/**
+ * Enroll current user to Moodle course, by the Moodle course internal number.
+ *
+ * @param String $internal_number
+ *   Course internal number in Moodle.
+ *
+ * @param Int $time_end
+ *   Enrollment end time, in POSIX format. 0 (default) for unlimited.
+ *
+ * @return String
+ *   The course id in Moodle, or FALSE if there is an error.
+ */
+function commerce_moodle_enroll_to_course_by_course_number($internal_number, $time_end = 0) {
+    
+    global $user;
+    $time = REQUEST_TIME;
+    
+    // User start time of course.
+    $time_start = $time;
+    
+    // Moodle role. 5 = student.
+    $moodle_role_id = 5;
+    
+    // Moodle context. 50 = course.
+    $moodle_context_level = 50;
+    
+    // Moodle user id for the record updates. 2 = admin.
+    $moodle_modifier_id = 2;
+    
+    // Connect to the Moodle database.
+    $con = moodle_connector_connect();
+    if (!$con) {
+        watchdog('Commerce Moodle', "Error connecting to the Moodle database.");
+        return FALSE;
+    }
+    
+    try {
+        
+        // Get Moodle user id.
+        $moodle_user_id = $con->query("SELECT id FROM {user} WHERE username = :user_name", array(':user_name' => $user->name,))->fetchField();
+        
+        if (!$moodle_user_id) {
+            watchdog('Commerce Moodle', "Cannot enroll user '%user' because it does not exist in Moodle.", array('%user' => $user->name,));
+            return FALSE;
+        }
+        
+        // Get Moodle course id, from course number.
+        $moodle_course_id = $con->query("SELECT id FROM {course} WHERE idnumber = :idnumber", array(':idnumber' => $internal_number,))->fetchField();
+        
+        if (!$moodle_course_id) {
+            watchdog('Commerce Moodle', "Cannot enroll user because a course with the internal number '%course' does not exist in Moodle.", array('%course' => $internal_number,));
+            return FALSE;
+        }
+        
+        // Get the 'manual' enrolment type for the course.
+        $moodle_enrol_id = $con->query("SELECT id FROM {enrol} WHERE enrol = :enrol AND courseid = :courseid", array(':enrol' => 'manual', ':courseid' => $moodle_course_id,))->fetchField();
+        
+        // Get the context id.
+        $moodle_context_id = $con->query("SELECT id FROM {context} WHERE contextlevel = :contextlevel AND instanceid = :instanceid", array(':contextlevel' => $moodle_context_level, ':instanceid' => $moodle_course_id,))->fetchField();
+    }
+    catch(Exception $e) {
+        watchdog('commerce_moodle', 'Error getting data from the Moodle database: ' . print_r($e->getMessage(), TRUE), array(), WATCHDOG_ERROR);
+        return FALSE;
+    }
+    
+    try {
+        
+        // Insert the enrolment.
+        $con->insert('user_enrolments')->fields(array('status' => 0, 'enrolid' => $moodle_enrol_id, 'userid' => $moodle_user_id, 'timestart' => $time_start, 'timeend' => $time_end, 'modifierid' => $moodle_modifier_id, 'timecreated' => $time, 'timemodified' => $time,))->execute();
+        
+        // Insert the role assignment.
+        $con->insert('role_assignments')->fields(array('roleid' => $moodle_role_id, 'contextid' => $moodle_context_id, 'userid' => $moodle_user_id, 'timemodified' => $time, 'modifierid' => $moodle_modifier_id, 'component' => '', 'itemid' => 0, 'sortorder' => 0,))->execute();
+    }
+    catch(PDOException $e) {
+        watchdog('Commerce Moodle', "Error inserting enrollment or role assignement for user '%user' (id %user_id) and course internal number '%course'.", array('%user' => $user->name, '%user_id' => $moodle_user_id, '%course' => $internal_number,));
+        return FALSE;
+    }
+    
+    return $moodle_course_id;
+}
+
+/**
+ * Implements hook_commerce_checkout_complete().
+ *
+ * Enroll online course(s) to user in Moodle when the product is bought.
+ */
+function commerce_moodle_commerce_checkout_complete($order) {
+
+    $product_types = variable_get('commerce_moodle_product_types');
+    
+    if (!$product_types) {
+        watchdog('Commerce Moodle', "Not doing anything because the product types are not set.");
+    } 
+    else {
+        $ow = entity_metadata_wrapper('commerce_order', $order);
+        foreach ($ow->commerce_line_items as $line_item) {
+            
+            $is_product = in_array($line_item->type->value(), commerce_product_line_item_types());
+            if (!$is_product) {
+                
+                // Skip line item.
+                continue;
+            }
+            
+            $is_moodle_course = !empty($product_types[$line_item->commerce_product->type->value() ]);
+            if (!$is_moodle_course) {
+                
+                // Skip product.
+                continue;
+            }
+            
+            // Get line item state and operator type
+            $line_state = $line_item->field_order_product_state->value();
+            $line_operator_type = $line_item->field_order_product_type->value();
+            
+            // Get program id
+            $program_id = $line_item->value()->data['program_nid'];
+            
+            // Get product type (course type)
+            $product_type = $line_item->commerce_product->field_course_type->value();
+            
+            // It is full course/all modules/training?
+            if ($product_type == MOODLE_COURSE_TYPE_FULL_COURSE || $product_type == MOODLE_COURSE_TYPE_ALL_MODULES || $product_type == MOODLE_COURSE_TYPE_TRAINING) {
+                
+                // Get all courses from a program id, state and operator type.
+                $courses = api_programs_get_program_courses($program_id, $line_state, $line_operator_type);
+                
+                foreach ($courses as $module_number => $modules) {
+                    foreach ($modules as $course_type => $module) {
+                        if ($module->type == MOODLE_COURSE_TYPE_FINAL_EXAM && $product_type == MOODLE_COURSE_TYPE_FULL_COURSE) {
+                            
+                            // Try to enroll current user to the final exam (full course only).
+                            $exam_sku = explode('|', $module->sku) [0];
+                            
+                            if ($order->status == 'canceled'){
+                              commerce_moodle_reset_course($exam_sku,NULL,$order->uid);
+                            } else {
+                              commerce_moodle_reset_course($exam_sku);
+                              commerce_moodle_enroll_to_course_by_course_number($exam_sku);
+                            }
+                        }
+                        if (($product_type == MOODLE_COURSE_TYPE_FULL_COURSE || $product_type == MOODLE_COURSE_TYPE_ALL_MODULES) && ($module->type == MOODLE_COURSE_TYPE_TRAINING || $module->type == MOODLE_COURSE_TYPE_QUIZ)) {
+                            $module_sku = explode('|', $module->sku) [0];
+                            
+                            if ($order->status == 'canceled'){
+                              commerce_moodle_reset_course($module_sku,NULL,$order->uid);
+                            } else {
+                              commerce_moodle_reset_course($module_sku);
+                              commerce_moodle_enroll_to_course_by_course_number($module_sku);
+                            }
+                        }
+                        if ($module->type == MOODLE_COURSE_TYPE_QUIZ && $product_type == MOODLE_COURSE_TYPE_TRAINING) {
+                            // Try to enroll to a related quizz.
+                            $quizz_sku = explode('|', $module->sku) [0];
+                            
+                            if ($order->status == 'canceled'){
+                              commerce_moodle_reset_course($quizz_sku,NULL,$order->uid);
+                            } else {
+                              commerce_moodle_reset_course($quizz_sku);
+                              commerce_moodle_enroll_to_course_by_course_number($quizz_sku);
+                            }
+                        }
+                    }
+                }
+                
+            } 
+            // Try to enroll to training, Recommended practices or final exam only.
+            if ($product_type != MOODLE_COURSE_TYPE_FULL_COURSE && $product_type != MOODLE_COURSE_TYPE_ALL_MODULES) {
+              // Get Drupal product SKU. Should be also a Moodle course internal number.
+              $sku = $line_item->commerce_product->sku->value();
+              
+              // Get SKU part, since the format is "SKU|Random Number"
+              $sku = explode('|', $sku) [0];
+              
+              // Try to enroll current user to course.
+              if ($order->status == 'canceled'){
+                commerce_moodle_reset_course($sku,NULL,$order->uid);
+              } else {
+                commerce_moodle_reset_course($sku);
+                commerce_moodle_enroll_to_course_by_course_number($sku);
+              }
+            }
+        }
+    }
+}
+
+/**
+ * Reset Moodle course for a particular user.
+ *
+ * @param String $internal_number
+ *   Course internal number in Moodle.
+ * @param type $user_id (optional)
+ *   Moodle user id
+ * @param type $uid (optional)
+ *   Drupal user id
+ *  
+ * @return boolean
+ */
+function commerce_moodle_reset_course($internal_number,$user_id = NULL,$uid = NULL){
+  global $user;
+ 
+  // Moodle context. 50 = course.
+  $moodle_context_level = 50;
+    
+  $con = moodle_connector_connect();
+  if (!$con) {
+      watchdog('Commerce Moodle', "Error connecting to the Moodle database.");
+      return FALSE;
+  }
+
+  try {
+
+      if ($user_id){
+        $moodle_user_id = $user_id;
+      } else if ($uid){
+        // Get Moodle user id from Drupal uid.
+        $moodle_user_id = $con->query("SELECT id FROM {user} WHERE idnumber = :idnumber", array(':idnumber' => $uid,))->fetchField();
+
+        if (!$moodle_user_id) {
+            watchdog('Commerce Moodle', "Cannot enroll user '%user' because it does not exist in Moodle.", array('%user' => $uid,));
+            return FALSE;
+        }
+      } else {
+        // Get Moodle user id.
+        $moodle_user_id = $con->query("SELECT id FROM {user} WHERE username = :user_name", array(':user_name' => $user->name,))->fetchField();
+
+        if (!$moodle_user_id) {
+            watchdog('Commerce Moodle', "Cannot enroll user '%user' because it does not exist in Moodle.", array('%user' => $user->name,));
+            return FALSE;
+        }
+      }
+
+      // Get Moodle course id, from course number.
+      $moodle_course_id = $con->query("SELECT id FROM {course} WHERE idnumber = :idnumber", array(':idnumber' => $internal_number,))->fetchField();
+
+      if (!$moodle_course_id) {
+          watchdog('Commerce Moodle', "Cannot enroll user because a course with the internal number '%course' does not exist in Moodle.", array('%course' => $internal_number,));
+          return FALSE;
+      }
+
+      // Get the 'manual' enrolment type for the course.
+      $moodle_enrol_id = $con->query("SELECT id FROM {enrol} WHERE enrol = :enrol AND courseid = :courseid", array(':enrol' => 'manual', ':courseid' => $moodle_course_id,))->fetchField();
+
+      $result = $con->query("DELETE FROM {user_enrolments} WHERE enrolid = :enrolid AND userid = :userid", array(':enrolid' => $moodle_enrol_id, ':userid' => $moodle_user_id,))->fetchAll();
+      
+      // Get the context id.
+      $moodle_context_id = $con->query("SELECT id FROM {context} WHERE contextlevel = :contextlevel AND instanceid = :instanceid", array(':contextlevel' => $moodle_context_level, ':instanceid' => $moodle_course_id,))->fetchField();
+      
+      $result = $con->query("DELETE FROM {role_assignments} WHERE contextid = :contextid AND userid = :userid", array(':contextid' => $moodle_context_id, ':userid' => $moodle_user_id,))->fetchAll();
+      
+      $moodle_quiz_id = $con->query("SELECT id FROM {quiz} WHERE course = :course", array(':course' => $moodle_course_id,))->fetchField();
+      
+      $result = $con->query("DELETE FROM {quiz_attempts} WHERE quiz = :quiz AND userid = :userid", array(':quiz' => $moodle_quiz_id, ':userid' => $moodle_user_id,))->fetchAll();
+      
+      $moodle_scorm_id = $con->query("SELECT id FROM {scorm} WHERE course = :course", array(':course' => $moodle_course_id,))->fetchField();
+      
+      $result = $con->query("DELETE FROM {scorm_scoes_track} WHERE scormid = :scormid AND userid = :userid", array(':scormid' => $moodle_scorm_id, ':userid' => $moodle_user_id,))->fetchAll();
+      
+      $result = $con->query("DELETE FROM {course_completions} WHERE course = :course AND userid = :userid", array(':course' => $moodle_course_id, ':userid' => $moodle_user_id,))->fetchAll();
+
+      $moodle_moduleinstance_id = $con->query("SELECT moduleinstance FROM {course_completion_criteria} WHERE course = :course", array(':course' => $moodle_course_id,))->fetchField();
+      $result = $con->query("DELETE FROM {course_modules_completion} WHERE coursemoduleid = :coursemoduleid AND userid = :userid", array(':coursemoduleid' => $moodle_moduleinstance_id, ':userid' => $moodle_user_id,))->fetchAll();
+      
+      $result = $con->query("DELETE FROM {course_completion_crit_compl} WHERE course = :course AND userid = :userid", array(':course' => $moodle_course_id, ':userid' => $moodle_user_id,))->fetchAll();
+      
+      $moodle_item_ids = $con->query("SELECT id FROM {grade_items} WHERE courseid = :courseid", array(':courseid' => $moodle_course_id,))->fetchAll();
+      if(count($moodle_item_ids)){
+        $amoodle_item_ids = array();
+        foreach ($moodle_item_ids as $moodle_item_id) {
+          $amoodle_item_ids[] = $moodle_item_id->id;
+        }
+        $result = $con->query("DELETE FROM {grade_grades} WHERE itemid IN (:itemids) AND userid = :userid", array(':itemids' => $amoodle_item_ids, ':userid' => $moodle_user_id,))->fetchAll();
+      }
+      
+      // Check if local_coursehelper plugin is enabled
+      if ($con->schema()->tableExists('local_coursehelper')){
+        $result = $con->query("DELETE FROM {local_coursehelper} WHERE courseid = :courseid AND userid = :userid", array(':courseid' => $moodle_course_id, ':userid' => $moodle_user_id,))->fetchAll();
+      }
+      
+  }
+  catch(Exception $e) {
+      watchdog('commerce_moodle', 'Error getting data from the Moodle database: ' . print_r($e->getMessage(), TRUE), array(), WATCHDOG_ERROR);
+      return FALSE;
+  }
+  
+  return TRUE;
+}
+
+/**
+ * Alter the views data to enable some additional features for coupons in views.
+ */
+function commerce_moodle_views_data_alter(&$data) {
+  $data['commerce_coupon']['granted_amount']['field']['title'] = t('Amount');
+}

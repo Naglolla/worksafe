@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the API Features Coupons feature.
+ */
+
+include_once 'api_features_coupons.features.inc';

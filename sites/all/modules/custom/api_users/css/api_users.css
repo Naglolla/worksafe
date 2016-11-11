@@ -1,0 +1,8 @@
+/* API backend user forms */
+
+.form-type-password-confirm .confirm-parent label,
+#edit-roles .form-item label.option,
+.view-admin-views-user td.views-field-edit-node > a {
+  text-transform: capitalize;
+}
+

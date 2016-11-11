@@ -1,0 +1,14 @@
+name = API Commerce
+description = API Commerce Cart functionality
+dependencies[] = moodle_connector
+dependencies[] = commerce_cart
+dependencies[] = commerce_checkout_redirect
+dependencies[] = commerce_moodle
+files[] = api_commerce.class.inc
+files[] = api_commerce.refund.inc
+package = API Custom
+core = "7.x"
+version = "7.x-0.1"
+project = "api_commerce"
+
+

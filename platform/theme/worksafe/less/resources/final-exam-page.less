@@ -1,0 +1,31 @@
+&#page-mod-quiz-attempt {
+  #quiz-timer {
+    font: @font-body-button;
+    font-weight: 500;
+    color: @main-color-dark;
+    background: url("@{images}/timer.png") no-repeat left center;
+    padding-left: 35px;
+    position: absolute;
+    right: 5%;
+    top: 3px;
+    #quiz-time-left {
+      font: @font-body-sub-title;
+      font-weight: 700;
+      color: @main-color-orange;
+      @media @small-size {
+        font: @font-body-table;
+      }
+    }
+    @media @small-size {
+      font: @font-body-table;
+      line-height: 25px;
+      top: 50px;
+    }
+  }
+  
+  h3.no {
+    @media @small-size {
+      margin-top: 40px;
+    }
+  }
+}

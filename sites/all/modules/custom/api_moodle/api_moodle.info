@@ -1,0 +1,13 @@
+name = API Moodle
+description = Helper to work with Moodle from Drupal.
+dependencies[] = api_course
+dependencies[] = api_custom
+dependencies[] = api_safety_keys
+dependencies[] = moodle_connector
+dependencies[] = moodle_courselist
+package = API Custom
+core = "7.x"
+version = "7.x-0.1"
+project = "api_moodle"
+
+

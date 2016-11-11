@@ -1,0 +1,674 @@
+<?php
+
+/**
+ * @file
+ * Provides custom functionality for API Worksafe 2.0 site.
+ */
+define('EDIT_OWN_COMPANY_PERM', 'edit own company');
+//this is for Customer Support role to access Admin Area (check bug #40629)
+define('ACCESS_USER_ADMINISTRATION_PERM', 'access user administration area');
+define('ADMIN_ROLE', 'administrator');
+define('AUTHENTICATED_USER_ROLE','authenticated user');
+define('COMPANY_ADMIN_ROLE', 'company admin');
+define('CUSTOMER_SUPPORT_ROLE', 'customer support');
+define('ANTEA_USER_ROLE', 'antea user');
+
+/**
+ * Implements HOOK_permission().
+ */
+function api_company_admin_permission() {
+  return array(
+    EDIT_OWN_COMPANY_PERM => array(
+      'title' => t('Edit own company'),
+      'description' => t('Edit own company.'),
+    ),
+    ACCESS_USER_ADMINISTRATION_PERM => array(
+      'title' => t('Access user administration area'),
+      'description' => t('Access user administration area.'),
+    ),
+  );
+}
+
+/**
+ * Implements HOOK_menu_alter().
+ */
+function api_company_admin_menu_alter(&$items) {
+
+  $items['node/%node/edit']['access callback'] = 'api_company_admin_node_access';
+
+  //give access to add people just to a perm only administrator has for now
+  $items['admin/people/create']['access arguments'] = array('administer users');
+
+  // TO-DO: check permissions for Customer Support
+  // Change access arguments to restrict the access for Company Admin role
+  $items['node/add']['access arguments'] = array('flush caches');
+  $items['node/add']['access callback'] = 'user_access';
+  $items['admin/config']['access arguments'] = array('flush caches');
+  $items['node/add/branch']['access callback'] = 'user_access';
+  $items['node/add/company']['access callback'] = 'user_access';
+  $items['node/add/branch']['access arguments'] = array('api users customer support');
+  $items['node/add/company']['access arguments'] = array('api users customer support');
+  $items['admin/commerce']['access arguments'] = array('flush caches');
+  $items['admin/people']['access arguments'] = array('flush caches');
+
+  $items['admin/config/system/jreject']['access arguments'] = array('flush caches');
+  $items['admin/config/system/jreject/configure']['access arguments'] = array('flush caches');
+  $items['admin/config/system/jreject/options']['access arguments'] = array('flush caches');
+  $items['admin/config/system/jreject/browsers']['access arguments'] = array('flush caches');
+  $items['admin/config/system/jreject/alternatives']['access arguments'] = array('flush caches');
+
+  $items['admin/config/people/login-destination']['access arguments'] = array('flush caches');
+  $items['admin/config/people/login-destination/add']['access arguments'] = array('flush caches');
+  $items['admin/config/people/login-destination/edit/%login_destination']['access arguments'] = array('flush caches');
+  $items['admin/config/people/login-destination/delete/%login_destination']['access arguments'] = array('flush caches');
+  $items['admin/config/people/login-destination/list']['access arguments'] = array('flush caches');
+  $items['admin/config/people/login-destination/settings']['access arguments'] = array('flush caches');
+
+  $items['admin/config/people/accounts']['access arguments'] = array('flush caches');
+  $items['admin/config/people/accounts/fields']['access arguments'] = array('flush caches');
+  $items['admin/config/people/accounts/display']['access arguments'] = array('flush caches');
+
+  $items['admin/commerce/customer-profiles/add']['access arguments'] = array('flush caches');
+  $items['admin/commerce/customer-profiles/add/billing']['access arguments'] = array('flush caches');
+  $items['admin/commerce/customer-profiles/add/shipping']['access arguments'] = array('flush caches');
+
+  $items['admin/config/services/dfp']['access arguments'] = array('flush caches');
+
+  $items['admin/index']['access arguments'] = array('flush caches');
+
+  $items['user/%user/cancel']['access arguments'] = array('flush caches');
+  $items['user/%user/cancel/confirm/%/%']['access arguments'] = array('flush caches');
+
+  // Custom access callback.
+  $items['user/%user/edit']['access callback'] = 'api_company_user_edit_access';
+
+  // Redirect Facility view page to the related company page.
+  $items['node/%node']['page callback'] = 'api_company_admin_node_page_view';
+}
+
+/**
+ * Implements hook_admin_menu_output_alter().
+ */
+function api_company_admin_admin_menu_output_alter(&$content) {
+  global $user;
+  // Add menu items to customer support users.
+  if (in_array(ANTEA_USER_ROLE, $user->roles)) {
+    $content['menu']['admin/content/companies'] = array(
+      '#title' => t('Manage Company Facilities'),
+      '#href' => 'admin/content/companies',
+    );
+  }
+  if (in_array(ADMIN_ROLE, $user->roles)) {
+    unset($content['menu']['admin/people']['admin/people/api/company/users']);
+    unset($content['menu']['admin/people']['admin/people/api/users']);
+    unset($content['menu']['admin/people']['admin/people/customer-support']);
+  }
+}
+
+/**
+ * Access callback for user account editing.
+ */
+function api_company_user_edit_access($account) {
+  global $user;
+  // Is Company admin?
+  if (in_array(COMPANY_ADMIN_ROLE, $user->roles)) {
+    // Get user company id.
+    $user_company = _get_user_company($user->uid);
+    // Get user account company id.
+    $account_company =  _get_user_company($account->uid);
+
+    // If different accounts, change page title.
+    if ($user->uid != $account->uid) {
+      drupal_set_title(t('User Profile'));
+    }
+
+    return $user_company == $account_company;
+  }
+  return (($GLOBALS['user']->uid == $account->uid) || user_access('administer users')) && $account->uid > 0;
+}
+
+/**
+ * Page callback.
+ */
+function api_company_admin_node_page_view($node) {
+  if ($node->type == BRANCH_CONTENT_TYPE) {
+    $company_nid = _api_custom_field_item('node', $node, 'field_company', 'target_id');
+    if (!empty($company_nid)) {
+      // Redirect to related company page.
+      drupal_goto('node/'. $company_nid);
+    }
+  }
+  return node_page_view($node);
+}
+
+/**
+ * Access function allowing to edit own company.
+ */
+function api_company_admin_node_access($op, $node, $account = NULL) {
+  // We just need to overwrite behaviour when
+  // - the user doesn't already has perm to edit the node
+  // - and he is trying to edit a company node
+  // - and he has edit own company perm assigned
+  if (!node_access($op, $node, $account)) {
+    if (!empty($node->type) && $node->type == COMPANY_CONTENT_TYPE && user_access(EDIT_OWN_COMPANY_PERM)) {
+      global $user;
+      return _user_can_edit_company($node, $user);
+    }
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
+ * Implements HOOK_menu().
+ */
+function api_company_admin_menu() {
+  $items['user/%user/company'] = array(
+    'title'            => 'My Company',
+    'page callback'    => 'api_company_admin_company_page',
+    'page arguments'   => array(1),
+    'access arguments' => array(EDIT_OWN_COMPANY_PERM),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/config/api/directory-page'] = array(
+    'title' => 'Directory Page',
+    'description' => 'Administer and Configure Directory page.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_company_admin_configuration_form'),
+    'file' => 'api_company_admin.admin.inc',
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );
+  return $items;
+}
+
+/**
+ * Callback for Edit own Company page.
+ */
+function api_company_admin_company_page($user) {
+  $company_nid = _get_user_company($user->uid);
+  if (!empty($company_nid)) {
+    $company_node = node_load($company_nid, NULL, TRUE);
+    $form_state['build_info']['args'] = array($company_node);
+    $form_state['is_company_page'] = TRUE;
+    form_load_include($form_state, 'inc', 'node', 'node.pages');
+    drupal_set_title(t('My Company'));
+    return drupal_build_form($company_node->type . '_node_form', $form_state);
+  }
+  else {
+    return '';
+  }
+}
+
+/**
+ * Implements HOOK_form_FORM_ID_alter().
+ */
+function api_company_admin_form_node_form_alter(&$form, $form_state) {
+  global $user;
+  $node = $form['#node'];
+
+  if ($node->type == COMPANY_CONTENT_TYPE) {
+    drupal_add_js(drupal_get_path('module', 'api_company_admin') . '/api_company_admin.js');
+  }
+
+  if ($node->type == COMPANY_CONTENT_TYPE && !empty($node->nid) &&
+      !in_array(ADMIN_ROLE, $user->roles) && !in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+    // Disable Company name edition for non admin users.
+    $form['title_field']['#disabled'] = TRUE;
+
+    // Hidding HQ address and phone for non admin.
+    $form['field_address']['#access'] = FALSE;
+    $form['field_tel']['#access'] = FALSE;
+
+    //we cannot set the redirect directly in the company page, we need to set it on submittion.
+    if (!empty($form_state['is_company_page'])) {
+      $form['actions']['submit']['#submit'][] = 'api_company_admin_custom_node_submit';
+    }
+  }
+}
+
+/**
+ * Custom submit handler to redirect to user page on the company edit page.
+ */
+function api_company_admin_custom_node_submit($form, &$form_state) {
+  $form_state['redirect'] = 'user';
+}
+
+/**
+ * Check if a user can edit a company.
+ * Users can edit just their own company.
+ *
+ * @return bool
+ */
+function _user_can_edit_company($node, $user) {
+
+  $company_nid = _get_user_company($user->uid);
+  if ($node->nid == $company_nid) {
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+function _get_user_company($uid) {
+  $branch_company_nid = 0;
+  $user = user_load($uid);
+  $user_branch_nid = _api_custom_field_item('user', $user, 'field_branch', 'target_id');
+
+  if (!empty($user_branch_nid)) {
+    $branch = node_load($user_branch_nid);
+    $branch_company_nid = _api_custom_field_item('node', $branch, 'field_company', 'target_id');
+  }
+  return $branch_company_nid;
+}
+
+/**
+ * Get company admins.
+ *
+ * @param $nid
+ *  Company node id.
+ */
+function _get_company_admins($nid) {
+  $role = user_role_load_by_name(COMPANY_ADMIN_ROLE);
+
+  $company_admins = db_select('users_roles', 'ur')
+  ->fields('ur', array('uid'))
+  ->condition('rid', $role->rid)
+  ->execute()->fetchAllKeyed(0, 0);
+
+  if (empty($company_admins)) {
+    return NULL;
+  }
+
+  $company_branches = api_custom_company_branches($nid);
+  $company_branches_nids = array_keys($company_branches);
+
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'user')
+  ->propertyCondition('uid', $company_admins, 'IN')
+  ->propertyCondition('status', 1)
+  ->fieldCondition('field_branch', 'target_id', $company_branches_nids);
+  $result = $query->execute();
+
+  if (!empty($result['user'])) {
+    return array_keys($result['user']);
+  }
+  return NULL;
+}
+
+/**
+ * Get company users.
+ *
+ * @param integer $company_nid Company ID
+ * @param array $filters Filter users
+ * @return array of users.
+ */
+function _get_company_users($company_nid, $filters = array(), $header = array(), $limit = 50000000) {
+  $company_branches = api_custom_company_branches($company_nid);
+  $company_branches_nids = array_keys($company_branches);
+
+  // Build the Query.
+  $query = db_select('users', 'u')->extend('PagerDefault')->extend('TableSort');
+  $query
+    ->fields('u',array('uid', 'name', 'mail', 'status'))
+    ->fields('ffn',array('field_first_name_value'))
+    ->fields('fln',array('field_last_name_value'))
+    ->fields('esk',array('id'))
+    ->condition('u.uid', '0', '!=')
+    ->orderByHeader($header)
+    ->limit($limit);
+  $query->leftjoin('field_data_field_first_name', 'ffn', 'u.uid = ffn.entity_id');
+  $query->leftjoin('field_data_field_last_name', 'fln', 'u.uid = fln.entity_id');
+  $query->leftjoin('eck_safety_key', 'esk', 'u.uid = esk.uid');
+  $query->leftjoin('field_data_field_key_expiration_date', 'eske', 'esk.id = eske.entity_id');
+
+  // Only get users that belong to the current user's company
+  $query->leftjoin('field_data_field_branch', 'bid', 'u.uid = bid.entity_id');
+  $query->condition('bid.field_branch_target_id', $company_branches_nids, 'IN');
+
+  if (isset($filters['username'])) {
+    $query->condition('u.name', $filters['username']);
+  }
+  if (isset($filters['email'])) {
+    $query->condition('u.mail', $filters['email']);
+  }
+  if (isset($filters['first_name'])) {
+    $query->condition('ffn.field_first_name_value', $filters['first_name']);
+  }
+  if (isset($filters['last_name'])) {
+    $query->condition('fln.field_last_name_value', $filters['last_name']);
+  }
+  if (isset($filters['safety_key']) && $filters['safety_key'] != 'all') {
+    $current_time = format_date(time(), 'custom', t('Y-m-d G:i:s', array(), array('context' => 'php date format')));
+    switch ($filters['safety_key']) {
+    case 'valid_safety':
+      $query->condition('eske.bundle', 'safety_key');
+      $query->condition('eske.field_key_expiration_date_value', $current_time, '>');
+      break;
+    case 'expired_safety':
+      $query->condition('eske.bundle', 'safety_key');
+      $query->condition('eske.field_key_expiration_date_value', $current_time, '<');
+      break;
+    case 'no_safety':
+      $query->condition('eske.field_key_expiration_date_value', NULL);
+      break;
+    }
+  }
+  if (isset($filters['program']) && $filters['program'] != 'all') {
+    $query->leftjoin('field_data_field_program', 'fp', 'esk.id = fp.entity_id');
+    $query->condition('fp.bundle', 'safety_key');
+    $query->condition('fp.field_program_target_id', $filters['program']);
+  }
+  if (isset($filters['status']) && $filters['status'] != 'all') {
+    $status = ($filters['status'] == 'active')? 1 : 0;
+    $query->condition('u.status', $status);
+  }
+
+  $result = $query->execute();
+  $users = array();
+  foreach ($result as $record) {
+    if (!empty($record->id)) {
+      $safety_key = entity_load(SAFETY_KEY_ENTITY, array($record->id));
+      $safety_key = reset($safety_key);
+      $path = 'safety-key-company/' . $safety_key->number;
+      $safety_key->path = $path;
+      $record->safety_key = $safety_key;
+    }
+    $users[] = $record;
+  }
+  return $users;
+}
+
+/**
+ * Implements HOOK_form_FORM_ID_alter().
+ */
+function api_company_admin_form_views_exposed_form_alter(&$form, $form_state, $form_id) {
+  if ($form['#id'] == 'views-exposed-form-directory-directory-search') {
+    $form['#attached']['js'][drupal_get_path('module', 'api_company_admin') . '/api_company_directory.js'] = array(
+      'type' => 'file',
+    );
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ *
+ * Used for enabling using templates inside my module
+ */
+function api_company_admin_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'api_company_admin'),
+    'template path' => drupal_get_path('module', 'api_company_admin') . '/templates',
+  );
+}
+
+/**
+ * Get company count.
+ * @returns: Number of companies active on the site.
+ */
+function api_company_get_companies_count() {
+  $companies_count = &drupal_static(__FUNCTION__);
+  if (!isset($companies_count)) {
+    $query = db_select('node', 'n');
+    $query->fields('n', array('nid'));
+    $query->condition('n.status', NODE_PUBLISHED)
+      ->condition('n.type', COMPANY_CONTENT_TYPE);
+    $companies_count = $query->countQuery()->execute()->fetchField();
+  }
+  return $companies_count;
+}
+
+/**
+ * Implements HOOK_custom_theme().
+ */
+function api_company_admin_custom_theme() {
+  global $user;
+  // Use admin theme in node pages for admin users.
+  if (in_array(ADMIN_ROLE, $user->roles) && arg(0) == 'node') {
+    $admin_theme = variable_get('admin_theme', 'commerce_kickstart_admin');
+    return $admin_theme;
+  }
+}
+
+//////////////////////////////////////////////////////
+// Company Entity Reference Widget.
+//////////////////////////////////////////////////////
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function api_company_admin_entity_info_alter(&$info) {
+  foreach ($info as $entity_type => $data) {
+    $info[$entity_type]['view modes']['api_company_admin'] = array(
+      'label' => t('Company Entity Reference'),
+      'custom settings' => TRUE,
+    );
+  }
+}
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function api_company_admin_field_widget_info() {
+  $widgets['company_reference'] = array(
+    'label' => t('Company reference'),
+    'description' => t('A custom Company widget for entityreference'),
+    'field types' => array('entityreference'),
+    'settings' => array(
+      'custom_display_fields' => array(),
+    ),
+    'behaviors' => array(
+      'multiple values' => FIELD_BEHAVIOR_CUSTOM,
+      'default value' => FIELD_BEHAVIOR_NONE,
+    ),
+  );
+
+  return $widgets;
+}
+
+/**
+ * Implements hook_field_widget_settings_form().
+ */
+function api_company_admin_field_widget_settings_form($field, $instance) {
+  $widget = $instance['widget'];
+  $settings = $widget['settings'];
+
+  if ($widget['type'] == 'company_reference') {
+    $target_type = $field['settings']['target_type'];
+
+    // Get all view modes in entity type.
+    $entity_info = entity_get_info($target_type);
+    $view_modes = array_keys($entity_info['view modes']);
+
+    $element['custom_display_fields'] = array(
+      '#type' => 'select',
+      '#title' => t('View mode displayed'),
+      '#options' => drupal_map_assoc($view_modes),
+      '#default_value' => isset($settings['custom_display_fields']) ? $settings['custom_display_fields'] : array(),
+    );
+
+    return $element;
+  }
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function api_company_admin_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+
+  $widget = $instance['widget'];
+
+  if ($widget['type'] == 'company_reference') {
+    $value_key = key($field['columns']);
+    $has_value = isset($items[0][$value_key]);
+    $element['#type'] = 'item';
+    // Custom validate function.
+    $element['#element_validate'][] = 'options_field_widget_validate';
+    $entity_type = $field['settings']['target_type'];
+
+    $handler = entityreference_get_selection_handler($field, $instance);
+    $view_mode = $widget['settings']['custom_display_fields'];
+
+    // Build the path of the element.
+    $parents_path = $field['field_name'];
+
+    if (!empty($form['#parents'])) {
+      $parents = $form['#parents'];
+      $first_parent = array_shift($parents);
+      $parents_path = $first_parent;
+
+      if (!empty($parents)) {
+        $parents_path .= '[' . implode('][', $parents) . ']';
+      }
+
+      $parents_path .= '[' . $field['field_name'] . ']';
+    }
+
+    $multiple = $field['cardinality'] > 1 || $field['cardinality'] == FIELD_CARDINALITY_UNLIMITED;
+    $required = $element['#required'];
+
+    // Get companies.
+    $companies['_none'] = t('- Select -');
+    $companies += api_custom_companies();
+    $properties = array(
+      'strip_tags' => TRUE,
+      'optgroups' => TRUE,
+      'empty_option' => 'option_none',
+      'filter_xss' => FALSE,
+    );
+    $default_value = _options_storage_to_form($items, $companies, $value_key, $properties);
+    // Company selection.
+
+    $element['#title'] = t('Company Name');
+    $element['#type'] = 'select';
+    $element['#options'] = $companies;
+    $element['#multiple'] = $multiple;
+    $element['#default_value'] = $default_value;
+    $element['#properties'] = $properties;
+    $element['#value_key'] = $value_key;
+
+  }
+  return $element;
+
+}
+
+/**
+ * Return attached checkboxes.
+ *
+ * @param string $entity_type
+ *   String containing the type of entity.
+ * @param string $parents_path
+ *   String parents_path.
+ * @param array $field
+ *   Array contains field.
+ * @param string $langcode
+ *   String language.
+ * @param array $items
+ *   (Optional) Array of all marked items.
+ *
+ * @return array
+ *   Array to be added to Element.
+ */
+function api_company_admin_attach_fields($entity_type, $parents_path, array $field, $langcode, $view_mode, array $items = array(), $label_display = 'before') {
+
+  $multiple = $field['cardinality'] > 1 || $field['cardinality'] == FIELD_CARDINALITY_UNLIMITED;
+  $required = $element['#required'];
+  // Define empty array.
+  $rows = array();
+
+  // Get companies.
+  $companies[''] = t('- Select -');
+  $companies += api_custom_companies();
+
+  // Company selection.
+  $rows = array(
+    '#title' => t('Company Name'),
+    '#type' => 'select',
+    '#options' => $companies,
+    '#multiple' => $multiple,
+    '#default_value' => NULL,//api_company_admin_default_values(0, $items),
+  );
+
+  return $rows;
+}
+
+/**
+ * Return default value of select list.
+ *
+ * @param int $entity_id
+ *   Id of current items.
+ * @param array $items
+ *   (Optional) Saved items.
+ *
+ * @return int
+ *   Default value or 0 if empty.
+ */
+function api_company_admin_default_values($entity_id, array $items = array()) {
+  $default_values = array();
+
+  foreach ($items as $record) {
+    $default_values[] = $record['target_id'];
+  }
+  $default_values = drupal_map_assoc($default_values);
+
+  if (in_array($entity_id, $default_values)) {
+    return $entity_id;
+  }
+
+  return 0;
+}
+
+/**
+ * Helper funtion to get work type list.
+ */
+function api_company_get_work_types() {
+  return array(
+    3 => 'Above Ground Storage Tanks',
+    4 => 'Appliances',
+    415 => 'Architecture',
+    5 => 'Asphalt and Paving',
+    6 => 'Barricades and Guard Rails',
+    7 => 'Brick and Stone Work',
+    87 => 'Building Maintenance - General',
+    84 => 'Canopy Graphics & Signage',
+    8 => 'Car Wash Equipment',
+    9 => 'Carpentry',
+    10 => 'Cleaning Services',
+    11 => 'Concrete and Masonry',
+    52 => 'Construction Management',
+    187 => 'Drilling',
+    13 => 'Electrical',
+    14 => 'Excavation',
+    15 => 'Fencing',
+    16 => 'Fuel Pumps/Dispensers',
+    17 => 'General Contractor',
+    18 => 'Glass Installation and Repair',
+    83 => 'Graphic Installations',
+    85 => 'Graphic Manufacturing',
+    19 => 'HVAC (Heating and Air Conditioning)',
+    128 => 'Interior Finishes',
+    20 => 'Lawn Care',
+    21 => 'Lift, Hoist and Hydraulics',
+    22 => 'Metal Working and Welding',
+    23 => 'Painting',
+    137 => 'Permits',
+    24 => 'Pest Control',
+    51 => 'Petroleum Site Construction Management',
+    25 => 'Plumbing',
+    26 => 'Power Washing',
+    41 => 'Program Management',
+    35 => 'Project Management Services',
+    27 => 'Roofing, Gutters and Downspouts',
+    28 => 'Sand Blasting',
+    29 => 'Security Systems',
+    30 => 'Siding',
+    31 => 'Spill Response',
+    1405 => 'Testing and Maintenance',
+    32 => 'Underground Storage Tanks',
+    33 => 'Waste Disposal',
+    34 => 'Window Washing',
+  );
+}

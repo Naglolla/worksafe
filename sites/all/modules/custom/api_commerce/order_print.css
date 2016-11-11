@@ -1,0 +1,26 @@
+header#section-header, 
+footer#section-footer, 
+.detail-data, 
+.export-csv-button,
+.tabs.primary,
+#pager-text, 
+.item-list,
+.top-buttons,
+.button
+{
+  display: none !important;
+  visibility: hidden !important;
+}
+
+h1, h1#page-title {
+  
+  margin-bottom: 0;
+}
+
+.print-button {
+  height: 0 !important;
+}
+
+.views-field-order-id {
+  display: none;
+}

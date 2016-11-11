@@ -1,0 +1,101 @@
+/* My Courses widget */
+body.not-logged-in {
+  #block-api-moodle-api-moodle-my-courses-block {
+    display: none;
+  }
+}
+#block-api-moodle-api-moodle-my-courses-block {
+  width: 27%;
+  float: right;
+  border: 2px solid @main-color-dark;
+  .block-title {
+    font: @font-body-sub-title;
+    color: @main-color-white;
+    text-align: center;
+    text-transform: uppercase;
+    background: @main-color-dark;
+    padding: 20px 5px;
+  }
+  .my-courses-block {
+    .course:not(:last-child) {
+      border-bottom: 1px solid @main-color-dark;
+    }
+    span.message {
+      font: @font-body-info-link;
+      text-align: center;
+      display: block;
+      margin: 50px auto;
+    }
+  }
+  .course {
+    width: 90%;
+    margin: 20px auto;
+    .description {
+      a {
+        font: @font-body-info-link;
+        &:link {
+          text-decoration: none;
+        }
+        &:hover {
+          color: @main-color-orange;
+        }
+      }
+    }
+    .state {
+      margin: 10px 0 20px 0;
+      font-weight: 500;
+      color: @main-color-dark;
+      &:before {
+        content: '';
+        display: inline-block;
+        height: 20px;
+        width: 20px;
+        .border-radius(10px);
+        position: relative;
+        top: 4px;
+      }
+      &.not-started:before {
+        background-color: #EC1F26;
+      }
+      &.started:before {
+        background-color: #F69522;
+      }
+      &.exam-pending:before {
+        background-color: #F69522;
+      }
+      &.all-modules-completed:before {
+        background-color: #3BB44A;
+      }
+      &.safety-key-received:before {
+        background-color: #3BB44A;
+      }
+      &.restored:before {
+        background-color: #F69522;
+      }
+      &.token:before {
+        background: url("@{images}/token.png");
+        background-size: 20px;
+      }
+    }
+
+  }
+  .view-all-link {
+    a {
+      .button;
+      .button.primary;
+      min-width: initial;
+      white-space: nowrap;
+      margin: 15px;
+      padding: 0;
+      display: block;
+    }
+    @media @small-size {
+      width: 95%;
+      margin: 20px auto;
+    }
+  }
+  @media @small-size {
+    //display: none;
+    width: 99%;
+  }
+}

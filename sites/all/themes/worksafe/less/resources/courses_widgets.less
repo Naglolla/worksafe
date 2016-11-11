@@ -1,0 +1,62 @@
+#block-api-moodle-api-moodle-program-block,
+#block-api-safety-keys-safety-key-program-block {
+  background: @main-color-light;
+  width: 44%;
+  float: left;
+  margin-left: 5%;
+  .block-inner {
+    padding: 7% 10%;
+    @media @small-size {
+      padding: 30px;
+    }
+  }
+  .block-title {
+    font: @font-body-title;
+    color: @main-color-dark;
+    font-weight: 300;
+    text-align: left;
+    margin: 0;
+    white-space: nowrap;
+    @media @small-size {
+      font: @font-body-sub-title;
+    }
+  }
+  .content {
+    width: 100% !important;
+  }
+  .final-exam-program-block,
+  .safety-key-program-block {
+    .message {
+      font: @font-body-info;
+      font-weight: 300;
+      color: @main-color-soft;
+      margin: 30px 0;
+      display: block;
+    }
+    .link {
+      min-height: 60px;
+      display: block;
+      line-height: 60px;
+      text-align: center;
+      a {
+        .button;
+        .button.primary;
+        width: 100%;
+        display: block;
+        padding: 0;
+      }
+    }
+  }
+  @media @small-size {
+    width: 100%;
+    float: none;
+    margin-left: 0;
+  }
+}
+
+#block-api-safety-keys-safety-key-program-block{
+  margin-left: 2%;
+  @media @small-size {
+    margin: 30px 0 60px 0;
+  }
+}

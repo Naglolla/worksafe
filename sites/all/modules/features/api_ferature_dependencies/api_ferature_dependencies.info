@@ -1,0 +1,7 @@
+name = API Ferature Dependencies
+description = Modules dependencies
+core = 7.x
+package = API Features
+php = 5.2.4
+features[features_api][] = api:1
+mtime = 1427943276

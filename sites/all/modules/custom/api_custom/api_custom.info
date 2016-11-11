@@ -1,0 +1,7 @@
+name = API Custom
+description = API custom functionality.
+package = API Custom
+version = VERSION
+core = 7.x
+files[] = views/handlers/api_custom_handler_addressfield.inc
+files[] = views/handlers/api_custom_handler_field_company_safety_keys.inc

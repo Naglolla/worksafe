@@ -1,0 +1,49 @@
+body.page-user-edit header.section-header,
+body.page-user-edit footer.section-footer,
+body.page-user-edit fieldset.form-wrapper,
+body.page-user-edit div.form-wrapper,
+body.page-user-edit h1.title,
+body.page-user-edit div.my-profile-anchors
+{
+  display: none;
+}
+body.page-user-edit fieldset#edit-purchases.form-wrapper {
+  display: block;
+  border-bottom-color: transparent;
+}
+body.page-user-edit fieldset#edit-purchases.form-wrapper table thead tr th.active img {
+  display: none;
+}
+body.page-user-edit fieldset#edit-purchases.form-wrapper div.view-footer {
+  display: none;
+}
+body.page-user-edit fieldset#edit-purchases.form-wrapper div.fieldset-wrapper {
+  width: 100%
+}
+body.page-user-edit fieldset#edit-purchases.form-wrapper legend span.fieldset-legend {
+  display: none;
+}
+body.page-user-edit fieldset#edit-branch-select {
+  display: none !important;
+}
+
+body.page-user-orders fieldset.form-wrapper {
+    padding-bottom: 0;
+}
+body.page-user-orders div#order-header {
+   padding-bottom: 0
+}
+@media print and (max-width:600px){ 
+  body.page-user-orders table.views-table tr {
+    padding: 0 20px;
+  }
+  body.page-user-orders table.views-table td{
+    text-align: left !important;
+  }
+  body.page-user-orders table.views-table td * {
+    display: inline !important;
+  }
+  body.page-user-orders table.views-table td .table-label:after {
+    content: ' ';
+  }
+}

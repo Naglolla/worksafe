@@ -1,0 +1,36 @@
+.moodle-dialogue-base .moodle-dialogue-lightbox {
+  background: rgba(0,0,0,0);
+}
+.moodle-dialogue-content {
+  .border-radius(0);
+  .moodle-dialogue-hd {
+    background: none !important;
+    padding: 20px !important;
+    h1 {
+      font: @font-body-button;
+    }
+    .closebutton {
+    }
+  }
+  .moodle-dialogue-bd {
+    .confirmation-message {
+      font: @font-body;
+    } 
+    input[type=button]{
+      background: @main-color-blue;
+      border-radius: 0;
+      border-color: @main-color-blue;
+      color: @main-color-white;
+      font: @font-body-button;
+      text-transform: uppercase;
+      width: 100%;
+      padding: 15px;
+      margin: 0;
+      text-shadow: none;
+      .box-shadow(none);
+    }
+    input[value=Cancel] {
+      display: none;
+    }
+  }
+}

@@ -1,0 +1,35 @@
+#api-programs-buy-form .product-price,
+#api-programs-buy-form .total .amount,
+#api-programs-buy-form  input[type="submit"],
+#api-programs-buy-program-form .product-price,
+#api-programs-buy-program-form .total .amount,
+#api-programs-buy-program-form  input[type="submit"] {
+  display: inline-table;
+  float: right;
+}
+#api-programs-buy-form #edit-courses input[attr_module_type="3"],
+#api-programs-buy-form #edit-courses input[attr_module_type="5"],
+#api-programs-buy-program-form input[attr_module_type="1"],
+#api-programs-buy-program-form input[attr_module_type="2"],
+#api-programs-buy-program-form input[attr_module_type="3"],
+#api-programs-buy-program-form input[attr_module_type="5"] {
+	margin-left: 2em;
+}
+#api-programs-buy-form #edit-courses input[attr_module_type="1"],
+#api-programs-buy-form #edit-courses input[attr_module_type="2"] {
+	margin-left: 4em;
+}
+#api-programs-buy-form .total,
+#api-programs-buy-program-form .total {
+	background-color: #ddd;
+	padding: 5px;
+}
+#api-programs-buy-form  input[type="submit"],
+#api-programs-buy-program-form  input[type="submit"] {
+	margin-top: 15px;
+}
+#api-programs-buy-form input[type="checkbox"],
+#api-programs-buy-program-form input[type="checkbox"] {
+  display: inline;
+  visibility: hidden;
+}

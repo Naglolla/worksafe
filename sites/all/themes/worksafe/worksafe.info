@@ -1,0 +1,279 @@
+name = API Worksafe Theme
+description = 'API Worksafe theme'
+package = Commerce Kickstart
+core = 7.x
+engine = phptemplate
+screenshot = screenshot.png
+base theme = 'omega'
+
+
+; REQUIRED CORE REGIONS
+
+regions[page_top] = Page Top
+regions[page_bottom] = Page Bottom
+regions[content] = Content
+
+; ADDITIONAL REGIONS
+
+regions[user_first] = User Bar First
+regions[user_second] = User Bar Second
+
+regions[menu] = Menu
+regions[shopping_cart] = Shopping Cart
+
+regions[header] = Header
+
+regions[footer_first] = Footer First
+regions[footer_second] = Footer Second
+regions[footer_third] = Footer Third
+
+; ZONES
+
+zones[user] = User
+zones[menu] = Menu
+zones[header] = Header
+zones[content] = Content
+zones[footer] = Footer
+
+
+; CUSTOM STYLESHEETS
+css[worksafe_style.css][name] = My sub-themes global style.
+css[worksafe_style.css][description] = This file holds all the globally active custom CSS of my sub-theme.
+css[worksafe_style.css][options][weight] = 12
+settings[alpha_css][worksafe_style.css] = 'worksafe_style.css'
+
+
+; THEME SETTINGS (DEFAULTS)
+settings[worksafe_primary_worksafe_default] = 'fluid'
+
+; RESPONSIVE SETTINGS
+settings[worksafe_responsive] = '1'
+settings[worksafe_viewport] = '1'
+settings[worksafe_viewport_initial_scale] = '1'
+settings[worksafe_viewport_min_scale] = '1'
+settings[worksafe_viewport_max_scale] = '1'
+settings[worksafe_viewport_user_scaleable] = ''
+settings[worksafe_layouts_worksafe_default_primary] = 'normal'
+
+settings[alpha_layouts_alpha_default_narrow_responsive] = '1'
+settings[alpha_layouts_alpha_default_narrow_media] = 'all and (max-width: 600px)'
+settings[alpha_layouts_alpha_default_narrow_weight] = '1'
+
+settings[alpha_layouts_alpha_default_normal_responsive] = '1'
+settings[alpha_layouts_alpha_default_normal_media] = 'all and (max-width: 964px) and (min-width: 601px)'
+settings[alpha_layouts_alpha_default_normal_weight] = '2'
+
+settings[alpha_layouts_alpha_default_wide_responsive] = '0'
+settings[alpha_layouts_alpha_default_wide_media] = 'all and (min-width: 965px)'
+settings[alpha_layouts_alpha_default_wide_weight] = '3'
+
+
+
+
+settings[alpha_libraries][omega_formalize] = 'omega_formalize'
+settings[alpha_libraries][omega_equalheights] = ''
+settings[alpha_libraries][omega_mediaqueries] = 'omega_mediaqueries'
+
+settings[alpha_css][alpha-reset.css] = 'alpha-reset.css'
+settings[alpha_css][alpha-mobile.css] = 'alpha-mobile.css'
+settings[alpha_css][alpha-alpha.css] = 'alpha-alpha.css'
+settings[alpha_css][omega-text.css] = 'omega-text.css'
+settings[alpha_css][omega-menu.css] = 'omega-menu.css'
+settings[alpha_css][omega-forms.css] = 'omega-forms.css'
+settings[alpha_css][global.css] = 'global.css'
+
+
+; ZONE USER
+settings[worksafe_zone_user_equal_height_container] = ''
+settings[worksafe_zone_user_wrapper] = '1'
+settings[worksafe_zone_user_force] = ''
+settings[worksafe_zone_user_section] = 'header'
+settings[worksafe_zone_user_weight] = '1'
+settings[worksafe_zone_user_columns] = '24'
+settings[worksafe_zone_user_primary] = ''
+settings[worksafe_zone_user_css] = ''
+settings[worksafe_zone_user_wrapper_css] = ''
+
+; ZONE MENU
+settings[worksafe_zone_menu_equal_height_container] = ''
+settings[worksafe_zone_menu_wrapper] = '1'
+settings[worksafe_zone_menu_force] = ''
+settings[worksafe_zone_menu_section] = 'header'
+settings[worksafe_zone_menu_weight] = '2'
+settings[worksafe_zone_menu_columns] = '24'
+settings[worksafe_zone_menu_primary] = ''
+settings[worksafe_zone_menu_css] = ''
+settings[worksafe_zone_menu_wrapper_css] = ''
+
+; ZONE HEADER
+settings[worksafe_zone_header_equal_height_container] = ''
+settings[worksafe_zone_header_wrapper] = '1'
+settings[worksafe_zone_header_force] = ''
+settings[worksafe_zone_header_section] = 'header'
+settings[worksafe_zone_header_weight] = '3'
+settings[worksafe_zone_header_columns] = '24'
+settings[worksafe_zone_header_primary] = ''
+settings[worksafe_zone_header_css] = ''
+settings[worksafe_zone_header_wrapper_css] = ''
+
+; ZONE CONTENT
+settings[worksafe_zone_content_equal_height_container] = ''
+settings[worksafe_zone_content_wrapper] = '1'
+settings[worksafe_zone_content_force] = '1'
+settings[worksafe_zone_content_section] = 'content'
+settings[worksafe_zone_content_weight] = '1'
+settings[worksafe_zone_content_columns] = '24'
+settings[worksafe_zone_content_primary] = 'content'
+settings[worksafe_zone_content_css] = ''
+settings[worksafe_zone_content_wrapper_css] = ''
+
+; ZONE FOOTER
+settings[worksafe_zone_footer_equal_height_container] = ''
+settings[worksafe_zone_footer_wrapper] = '1'
+settings[worksafe_zone_footer_force] = ''
+settings[worksafe_zone_footer_section] = 'footer'
+settings[worksafe_zone_footer_weight] = '1'
+settings[worksafe_zone_footer_columns] = '24'
+settings[worksafe_zone_footer_primary] = ''
+settings[worksafe_zone_footer_css] = ''
+settings[worksafe_zone_footer_wrapper_css] = ''
+
+
+settings[worksafe_region_dashboard_inactive_equal_height_container] = ''
+settings[worksafe_region_dashboard_inactive_equal_height_element] = ''
+settings[worksafe_region_dashboard_inactive_force] = ''
+settings[worksafe_region_dashboard_inactive_zone] = ''
+settings[worksafe_region_dashboard_inactive_prefix] = ''
+settings[worksafe_region_dashboard_inactive_columns] = '1'
+settings[worksafe_region_dashboard_inactive_suffix] = ''
+settings[worksafe_region_dashboard_inactive_weight] = '-50'
+settings[worksafe_region_dashboard_inactive_css] = ''
+
+settings[worksafe_region_dashboard_main_equal_height_container] = ''
+settings[worksafe_region_dashboard_main_equal_height_element] = ''
+settings[worksafe_region_dashboard_main_force] = ''
+settings[worksafe_region_dashboard_main_zone] = ''
+settings[worksafe_region_dashboard_main_prefix] = ''
+settings[worksafe_region_dashboard_main_columns] = '1'
+settings[worksafe_region_dashboard_main_suffix] = ''
+settings[worksafe_region_dashboard_main_weight] = '-50'
+settings[worksafe_region_dashboard_main_css] = ''
+
+
+; REGION USER FIRST
+settings[worksafe_region_user_first_equal_height_container] = ''
+settings[worksafe_region_user_first_equal_height_element] = ''
+settings[worksafe_region_user_first_force] = ''
+settings[worksafe_region_user_first_zone] = 'user'
+settings[worksafe_region_user_first_prefix] = ''
+settings[worksafe_region_user_first_columns] = '18'
+settings[worksafe_region_user_first_suffix] = ''
+settings[worksafe_region_user_first_weight] = '1'
+settings[worksafe_region_user_first_css] = ''
+
+
+; REGION USER SECOND
+settings[worksafe_region_user_second_equal_height_container] = ''
+settings[worksafe_region_user_second_equal_height_element] = ''
+settings[worksafe_region_user_second_force] = ''
+settings[worksafe_region_user_second_zone] = 'user'
+settings[worksafe_region_user_second_prefix] = ''
+settings[worksafe_region_user_second_columns] = '6'
+settings[worksafe_region_user_second_suffix] = ''
+settings[worksafe_region_user_second_weight] = '2'
+settings[worksafe_region_user_second_css] = ''
+
+
+; REGION MENU
+settings[worksafe_region_menu_equal_height_container] = ''
+settings[worksafe_region_menu_equal_height_element] = ''
+settings[worksafe_region_menu_force] = ''
+settings[worksafe_region_menu_zone] = 'menu'
+settings[worksafe_region_menu_prefix] = ''
+settings[worksafe_region_menu_columns] = '22'
+settings[worksafe_region_menu_suffix] = ''
+settings[worksafe_region_menu_weight] = '1'
+settings[worksafe_region_menu_css] = ''
+
+
+; REGION SHOPPING CART
+settings[worksafe_region_shopping_cart_equal_height_container] = ''
+settings[worksafe_region_shopping_cart_equal_height_element] = ''
+settings[worksafe_region_shopping_cart_force] = ''
+settings[worksafe_region_shopping_cart_zone] = 'menu'
+settings[worksafe_region_shopping_cart_prefix] = ''
+settings[worksafe_region_shopping_cart_columns] = '2'
+settings[worksafe_region_shopping_cart_suffix] = ''
+settings[worksafe_region_shopping_cart_weight] = '2'
+settings[worksafe_region_shopping_cart_css] = ''
+
+
+; REGION HEADER
+settings[worksafe_region_header_equal_height_container] = ''
+settings[worksafe_region_header_equal_height_element] = ''
+settings[worksafe_region_header_force] = ''
+settings[worksafe_region_header_zone] = 'header'
+settings[worksafe_region_header_prefix] = ''
+settings[worksafe_region_header_columns] = '24'
+settings[worksafe_region_header_suffix] = ''
+settings[worksafe_region_header_weight] = ''
+settings[worksafe_region_header_css] = ''
+
+
+; REGION CONTENT
+settings[worksafe_region_content_equal_height_container] = ''
+settings[worksafe_region_content_equal_height_element] = ''
+settings[worksafe_region_content_force] = '1'
+settings[worksafe_region_content_zone] = 'content'
+settings[worksafe_region_content_prefix] = ''
+settings[worksafe_region_content_columns] = '24'
+settings[worksafe_content_suffix] = ''
+settings[worksafe_region_content_weight] = ''
+settings[worksafe_region_content_css] = ''
+
+
+; REGION FOOTER FIRST
+settings[worksafe_region_footer_first_equal_height_container] = ''
+settings[worksafe_region_footer_first_equal_height_element] = ''
+settings[worksafe_region_footer_first_force] = '1'
+settings[worksafe_region_footer_first_zone] = 'footer'
+settings[worksafe_region_footer_first_prefix] = ''
+settings[worksafe_region_footer_first_columns] = '9'
+settings[worksafe_region_footer_first_suffix] = ''
+settings[worksafe_region_footer_first_weight] = '1'
+settings[worksafe_region_footer_first_css] = ''
+
+
+; REGION FOOTER SECOND
+settings[worksafe_region_footer_second_equal_height_container] = ''
+settings[worksafe_footer_second_equal_height_element] = ''
+settings[worksafe_region_footer_second_force] = '1'
+settings[worksafe_region_footer_second_zone] = 'footer'
+settings[worksafe_region_footer_second_prefix] = ''
+settings[worksafe_region_footer_second_columns] = '6'
+settings[worksafe_region_footer_second_suffix] = ''
+settings[worksafe_region_footer_second_weight] = '2'
+settings[worksafe_region_footer_second_css] = ''
+
+
+; REGION FOOTER THIRD
+settings[worksafe_region_footer_third_equal_height_container] = ''
+settings[worksafe_region_footer_third_equal_height_element] = ''
+settings[worksafe_region_footer_third_force] = '1'
+settings[worksafe_region_footer_third_zone] = 'footer'
+settings[worksafe_region_footer_third_prefix] = ''
+settings[worksafe_region_footer_third_columns] = '9'
+settings[worksafe_region_footer_third_suffix] = ''
+settings[worksafe_region_footer_third_weight] = '3'
+settings[worksafe_region_footer_third_css] = ''
+
+; SCRIPT
+scripts[] = 'js/jquery.dotdotdot.min.js'
+scripts[] = 'js/jssor.slider.min.js'
+scripts[] = 'js/slider.js'
+scripts[] = 'js/user.menu.js'
+scripts[] = 'js/mobile.menu.js'
+scripts[] = 'js/courses.widget.js'
+scripts[] = 'js/payment.method.js'
+scripts[] = 'js/login.js'
+scripts[] = 'js/directory.js'

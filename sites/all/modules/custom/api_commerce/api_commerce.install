@@ -1,0 +1,161 @@
+<?php
+
+/**
+ * @file
+ * Install and uninstall code for API Commerce module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function api_commerce_install(){
+  variable_set('login_destination_preserve_destination',TRUE);
+  api_commerce_update_7001();
+  api_commerce_update_7002();
+  api_commerce_update_7003();
+  api_commerce_update_7004();
+  api_commerce_update_7005();
+  api_commerce_update_7006();
+  api_commerce_update_7007();
+}
+
+function api_commerce_enable(){
+  variable_set('login_destination_preserve_destination',TRUE);
+  api_commerce_update_7001();
+  api_commerce_update_7002();
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function api_commerce_uninstall(){
+  
+}
+
+/**
+ * Update fields settings for Order detail entity view.
+ */
+function api_commerce_update_7001() {
+  
+  //commerce_customer_billing
+  $field_instance = field_read_instance('commerce_order', 'commerce_customer_billing', 'commerce_order');
+  $field_instance['display']['customer']['type'] = 'hidden';
+  unset($field_instance['display']['customer']['module']);
+  field_update_instance($field_instance);
+  
+  //commerce_customer_shipping
+  $field_instance = field_read_instance('commerce_order', 'commerce_customer_shipping', 'commerce_order');
+  $field_instance['display']['customer']['type'] = 'hidden';
+  unset($field_instance['display']['customer']['module']);
+  field_update_instance($field_instance);
+  
+  //commerce_line_items
+  $field_instance = field_read_instance('commerce_order', 'commerce_line_items', 'commerce_order');
+  $field_instance['display']['default']['settings']['view'] = 'api_line_items|default';
+  $field_instance['display']['customer']['settings']['view'] = 'api_line_items|default';
+  $field_instance['display']['administrator']['settings']['view'] = 'api_line_items|default';
+  field_update_instance($field_instance);
+  
+  return array(
+    'success' => TRUE,
+    'query' => 'Field settings were updated' );
+  
+}
+
+/**
+ * Disable Shipping pane on Checkout settings (admin/commerce/config/checkout)
+ */
+function api_commerce_update_7002() {
+  $shipping_pane = commerce_checkout_pane_load('commerce_shipping');
+  $shipping_pane['page'] = 'disabled';
+  $shipping_pane['enabled'] = 0;
+  commerce_checkout_pane_save($shipping_pane);
+  
+  return array(
+    'success' => TRUE,
+    'query' => 'Shipping pane disabled',
+  );
+}
+
+/**
+ * Make api_commerce heavier than commerce_checkout to avoid issues with form alter.
+ */
+function api_commerce_update_7003() {
+   $rec = db_update('system')
+          ->fields(array('weight' => 1))
+          ->condition('type', 'module')
+          ->condition('name', 'api_commerce')
+          ->execute();
+   
+   if (!empty($rec)) {
+     $ret = array(
+       'success' => TRUE,
+       'query' => 'api_commerce weight set correctly.',
+     );
+   }
+   else {
+     $ret = array(
+       'success' => FALSE,
+       'query' => 'There was a problem setting api_commerce weight',
+     );
+   }
+   
+   return $ret;
+}
+
+/**
+ * Disable Shipping information on Checkout settings (admin/commerce/config/checkout)
+ */
+function api_commerce_update_7004() {
+  $shipping_pane = commerce_checkout_pane_load('customer_profile_shipping');
+  $shipping_pane['page'] = 'disabled';
+  $shipping_pane['enabled'] = 0;
+  commerce_checkout_pane_save($shipping_pane);
+  
+  return array(
+    'success' => TRUE,
+    'query' => 'Shipping pane disabled',
+  );
+}
+
+/**
+ * Enable Province/Region field in billing information address.
+ */
+function api_commerce_update_7005() {
+  $field_name = 'commerce_customer_address';
+  $instance = field_info_instance('commerce_customer_profile', $field_name, 'billing');
+  if (!empty($instance)) {
+    $instance['widget']['settings']['format_handlers'][] = 'api_custom_addresfield';
+    field_update_instance($instance);
+    return array(
+    'success' => TRUE,
+    'query' => 'Province/Region field enabled',
+  );
+  } else {
+    return array(
+      'success' => FALSE,
+      'query' => 'Province/Region field disabled',
+    );
+  }
+}
+
+/**
+ * Disable Product autogenerate title.
+ */
+function api_commerce_update_7006() {
+  $instance = field_info_instance('node', 'field_product', 'product_display');
+  if (!empty($instance)) {
+    $instance['widget']['settings']['type_settings']['autogenerate_title'] = 0;
+    field_update_instance($instance);
+  }
+}
+
+/**
+ * Delete Product image field.
+ */
+function api_commerce_update_7007() {
+  $instance = field_info_instance('commerce_product', 'field_images', 'product');
+  if (!empty($instance)) {
+    field_delete_instance($instance, TRUE);
+  }
+}

@@ -1,0 +1,5 @@
+name = API Logs
+description = Module to record specific events of API actions.
+package = API Custom
+version = VERSION
+core = 7.x

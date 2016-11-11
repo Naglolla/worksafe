@@ -1,0 +1,786 @@
+<?php
+
+/**
+ * @file
+ * Provides Safety keys functionality for API Worksafe 2.0 site.
+ */
+
+define('SAFETY_KEY_ENTITY', 'safety_key');
+define('SAFETY_KEY_TABLE', 'eck_safety_key');
+
+/**
+ * Loads safety keys entities from the database.
+ *
+ * This function should be used whenever you need to load more than one safety key
+ * from the database. Safety keys are loaded into memory and will not require database
+ * access if loaded again during the same page request.
+ *
+ * @see entity_load()
+ * @see EntityFieldQuery
+ *
+ * @param $ids
+ *   An array of safety keys IDs.
+ * @param $conditions
+ *   (deprecated) An associative array of conditions on the {node}
+ *   table, where the keys are the database fields and the values are the
+ *   values those fields must have. Instead, it is preferable to use
+ *   EntityFieldQuery to retrieve a list of entity IDs loadable by
+ *   this function.
+ * @param $reset
+ *   Whether to reset the internal safety_key_load cache.
+ *
+ * @return
+ *   An array of safety keys objects indexed by id.
+ *
+ */
+function safety_key_load_multiple($ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load(SAFETY_KEY_ENTITY, $ids, $conditions, $reset);
+}
+
+/**
+ * Loads a safety key object from the database.
+ *
+ * @param $id
+ *   The safety key ID.
+ * @param $reset
+ *   Whether to reset the safety_key_load_multiple cache.
+ *
+ * @return
+ *   A fully-populated safety key object, or FALSE if the safety key is not found.
+ */
+function safety_key_load($id = NULL, $reset = FALSE) {
+  $ids = (isset($id) ? array($id) : array());
+  $conditions = array();
+  $safety_key = safety_key_load_multiple($ids, $conditions, $reset);
+  return $safety_key ? reset($safety_key) : FALSE;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function api_safety_keys_permission() {
+  $perms = array(
+  	'view own safety keys' => array(
+  		'title' => t('View own safety keys'),
+		),
+  	'admin safety keys' => array(
+  		'title' => t('Admin safety keys'),
+  		),
+  	);
+
+  return $perms;
+}
+
+/**
+ * Implements hook_views_api().
+ *
+ * Used for enabling using templates inside my module
+ */
+function api_safety_keys_views_api() {
+  return array(
+  	'api' => 3,
+  	'path' => drupal_get_path('module', 'api_safety_keys'),
+  	'template path' => drupal_get_path('module', 'api_safety_keys') . '/templates',
+  );
+}
+
+/**
+ * Implements HOOK_form_FORM_ID_alter().
+ */
+function api_safety_keys_form_eck__entity__form_edit_safety_key_safety_key_alter(&$form, $form_state, $form_id) {
+  // Hide user selection.
+  if (!empty($form['uid']['#default_value'])) {
+  	// Load user object.
+    $user = user_load($form['uid']['#default_value']);
+    if (!empty($user)) {
+      $form['uid']['#access'] = FALSE;
+      $form['user_name'] = array(
+      	'#type' => 'markup',
+      	'#markup' => t('<b>User</b>: %user_name<br/>', array('%user_name' => $user->name)),
+      	'#weight' => - 10,
+      );
+    }
+  }
+}
+
+/**
+ * Implements HOOK_menu().
+ */
+function api_safety_keys_menu() {
+  $items['admin/config/api/safety-keys'] = array(
+  'title' => 'Safety Keys Page',
+  'description' => 'Administer and Configure Safety Keys related configuration.',
+  'page callback' => 'drupal_get_form',
+  'page arguments' => array('api_safety_keys_configuration_form'),
+  'file' => 'api_safety_keys.admin.inc',
+  'access arguments' => array('access administration pages'),
+  'weight' => 0,
+  'type' => MENU_NORMAL_ITEM,
+  );
+  $items['user/%/safety_keys/%/print'] = array(
+  'title' => 'My Safety Key',
+  'page callback' => 'api_safety_keys_pdf_page',
+  'page arguments' => array(1, 3),
+  'access callback' => 'api_safety_keys_pdf_page_access',
+  'access arguments' => array(3)
+  );
+  $items['user/%/program/%/type/%/state/%/generate_key'] = array(
+  'title' => 'Generate Safety Key',
+  'page callback' => 'api_safety_keys_generate_key',
+  'page arguments' => array(1, 3, 5, 7),
+  'access arguments' => array('view own safety keys'),
+  'access callback' => TRUE,
+  );
+  $items['user/%/generate_key'] = array(
+  'title' => 'Generate Safety Key Service',
+  'page callback' => 'api_safety_keys_user_generate_key',
+  'page arguments' => array(1),
+  //'access arguments' => array('view own safety keys'),
+  'access callback' => TRUE,
+  );
+  return $items;
+}
+
+/**
+ * Implements HOOK_theme().
+ */
+function api_safety_keys_theme($existing, $type, $theme, $path) {
+  return array(
+  	'safety_key_pdf' => array(
+  		'path' => $path . '/templates',
+  		'template' => 'safety-key-pdf',
+  		'variables' => array(
+  			'key_user' => NULL,
+  			'key' => NULL,
+  			'first_name' => NULL,
+  			'last_name' => NULL,
+  			'issue_date' => NULL,
+  			'expiration_date' => NULL,
+  			'program_name' => NULL,
+            'certificate_info' => NULL
+  			),
+  		),
+  	'safety_key_program_block' => array(
+  		'path' => $path . '/templates',
+  		'template' => 'safety-key-program-block',
+  		'variables' => array(
+  			'message' => NULL,
+  			'link' => NULL,
+  			),
+  		),
+  	);
+}
+
+/**
+ * Page access callback function for api_safety_keys_pdf_page.
+ */
+function api_safety_keys_pdf_page_access($number) {
+  global $user;
+  if ((in_array(COMPANY_ADMIN_ROLE, $user->roles) && user_access('view own safety keys')) || in_array(CUSTOMER_SUPPORT_ROLE, $user->roles)) {
+  return TRUE;
+  } else if (user_access('view own safety keys')){
+  $key = api_safety_keys_load_by_number($number);
+  if ($key->uid == $user->uid){
+    return TRUE;
+  }
+  }
+  return FALSE;
+}
+
+/**
+ * Menu callback.
+ *
+ * @param $uid
+ * 	User ID.
+ * @param $number
+ * 	Safety key number
+ *
+ * @return
+ *   A PDF document with Safety key info.
+ */
+function api_safety_keys_pdf_page($uid, $number) {
+  global $user;
+  $key_user = NULL;
+  $key = NULL;
+
+  // Check user access.
+  if (!user_access('view own safety keys', $user)) {
+  	drupal_goto('user');
+  }
+
+  // Load user
+  if (!empty($uid) && is_numeric($uid)) {
+    $key_user = user_load($uid);
+  }
+
+  // Load Safety Key
+  if (!empty($number) && is_numeric($number)) {
+    $key = api_safety_keys_load_by_number($number);
+  }
+
+  // Check user owner or admin
+  if (!empty($key_user) && !empty($key)) {
+  	// Get safety key info.
+    $first_name = _api_custom_field_item('user', $key_user, 'field_first_name');
+    $last_name = _api_custom_field_item('user', $key_user, 'field_last_name');
+    $issue_date = format_date($key->created, 'api_mm_dd_yyyy', 'm/d/Y');
+    $expiration = _api_custom_field_item(SAFETY_KEY_ENTITY, $key, 'field_key_expiration_date');
+    $expiration = format_date(strtotime($expiration), 'api_mm_dd_yyyy', 'm/d/Y');
+    $program_nid = _api_custom_field_item(SAFETY_KEY_ENTITY, $key, 'field_program', 'target_id');
+    $program = node_load($program_nid);
+    $program_name = '';
+    if (!empty($program)) {
+      $program_name = $program->title;
+    }
+
+    $certificate_info = array();
+    $default_backgroud = "background: -moz-linear-gradient(top, rgba(127,127,127,0.65) 0%, rgba(99,99,99,0) 17%, rgba(0,0,0,0) 76%);
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,rgba(127,127,127,0.65)), color-stop(17%,rgba(99,99,99,0)), color-stop(76%,rgba(0,0,0,0)));
+    background: -webkit-linear-gradient(top, rgba(127,127,127,0.65) 0%,rgba(99,99,99,0) 17%,rgba(0,0,0,0) 76%);
+    background: -o-linear-gradient(top, rgba(127,127,127,0.65) 0%,rgba(99,99,99,0) 17%,rgba(0,0,0,0) 76%);
+    background: -ms-linear-gradient(top, rgba(127,127,127,0.65) 0%,rgba(99,99,99,0) 17%,rgba(0,0,0,0) 76%);
+    background: linear-gradient(to bottom, rgba(127,127,127,0.65) 0%,rgba(99,99,99,0) 17%,rgba(0,0,0,0) 76%);
+    filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#a67f7f7f', endColorstr='#00000000',GradientType=0 );";
+    $ust_program = _api_custom_field_item('node', $program, 'field_apply_rules', 'value');
+    if ($ust_program) {
+      $key_state = _api_custom_field_item(SAFETY_KEY_ENTITY, $key, 'field_state');
+      $states = _api_custom_get_us_states();
+      $key_state_name = (!empty($key_state) && !empty($states[$key_state])) ? $states[$key_state] : $key_state;
+      $key_operator_type = _api_custom_field_item(SAFETY_KEY_ENTITY, $key, 'field_operator_type');
+      $key_operator_type = $key_operator_type == 'A B' ? 'A+B' : $key_operator_type;
+      $program_name .= ", $key_state_name, Class $key_operator_type";
+      if (!empty($key_state) && !empty($key_operator_type)) {
+        $certificates = _api_custom_field_item('node', $program, 'field_col_sk_certificates', 'value', NULL);
+        foreach ($certificates as $certificate) {
+          $field_collection = field_collection_field_get_entity($certificate);
+          $state = _api_custom_field_item('field_collection_item', $field_collection, 'field_states', 'value');
+          $operator_type = _api_custom_field_item('field_collection_item', $field_collection, 'field_operator_types', 'value');
+          if (!empty($state) && !empty($operator_type) && $state == $key_state && $operator_type == $key_operator_type) {
+
+            $certificate_info['back_title'] = _api_custom_field_item('field_collection_item', $field_collection, 'field_sk_back_title', 'value');
+            $certificate_info['certificate_text'] = _api_custom_field_item('field_collection_item', $field_collection, 'field_certificate_text', 'value');
+            $certificate_info['printed_name_text'] = _api_custom_field_item('field_collection_item', $field_collection, 'field_sk_printed_name_text', 'value');
+            $certificate_info['signature_text'] = _api_custom_field_item('field_collection_item', $field_collection, 'field_sk_signature_text', 'value');
+            $certificate_info['front_text_1'] = _api_custom_field_item('field_collection_item', $field_collection, 'field_sk_front_text_1', 'value');
+            $certificate_info['front_text_2'] = _api_custom_field_item('field_collection_item', $field_collection, 'field_sk_front_text_2', 'value');
+            $background_uri = _api_custom_field_item('field_collection_item', $field_collection, 'field_sk_default_background', 'uri');
+            $certificate_info['background_image'] = !empty($background_uri) ? file_create_url($background_uri) : '';
+            $certificate_info['background_image_style'] = !empty($certificate_info['background_image']) ? 'background-image: url('.$certificate_info['background_image'].');' : '';
+            break;
+          }
+        }
+      }
+    }
+    if (empty($certificate_info)) {
+      $certificate_info['back_title'] = _api_custom_field_item('node', $program, 'field_sk_back_title', 'value');
+      $certificate_info['certificate_text'] = _api_custom_field_item('node', $program, 'field_certificate_text', 'value');
+      $certificate_info['printed_name_text'] = _api_custom_field_item('node', $program, 'field_sk_printed_name_text', 'value');
+      $certificate_info['signature_text'] = _api_custom_field_item('node', $program, 'field_sk_signature_text', 'value');
+      $certificate_info['front_text_1'] = _api_custom_field_item('node', $program, 'field_sk_front_text_1', 'value');
+      $certificate_info['front_text_2'] = _api_custom_field_item('node', $program, 'field_sk_front_text_2', 'value');
+      $background_uri = _api_custom_field_item('node', $program, 'field_sk_default_background', 'uri');
+      $certificate_info['background_image'] = !empty($background_uri) ? file_create_url($background_uri) : '';
+      $certificate_info['background_image_style'] = !empty($certificate_info['background_image']) ? 'background-image: url('.$certificate_info['background_image'].');' : '';
+    }
+
+    $html = theme('safety_key_pdf', array('key_user' => $key_user, 'key' => $key, 'first_name' => $first_name, 'last_name' => $last_name, 'issue_date' => $issue_date, 'expiration_date' => $expiration, 'program_name' => $program_name, 'certificate_info' => $certificate_info));
+    // Output PDF document.
+    pdf_using_mpdf_api($html, 'safety_key');
+  } else {
+  	drupal_access_denied();
+  }
+
+  return '';
+}
+
+/**
+ * Get Safety Key by number.
+ *
+ * @param $number
+ * 	Safety key number
+ *
+ * @return
+ *   A fully-populated safety key object, or FALSE if the safety key is not found.
+ */
+function api_safety_keys_load_by_number($number) {
+  if (!empty($number) && is_numeric($number)) {
+  	// Query to the database.
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', SAFETY_KEY_ENTITY)->propertyCondition('number', $number);
+    $result = $query->execute();
+    // Return safety key if found.
+    if (isset($result['safety_key'])) {
+      $sk = reset($result);
+      $key = safety_key_load(key($sk));
+      return $key;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Get Safety Key by program and user.
+ *
+ * @param $program_id
+ * 	Safety key program.
+ * @param $user_id
+ * 	Safety key program.
+ *
+ * @return
+ *   A fully-populated safety key object, or FALSE if the safety key is not found.
+ */
+function api_safety_keys_load_by_program($program_id, $user_id) {
+  if (!empty($program_id) && !empty($user_id)) {
+  	// Query to the database.
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', SAFETY_KEY_ENTITY)
+    ->propertyCondition('uid', $user_id)
+    ->fieldCondition('field_program', 'target_id', $program_id);
+    $result = $query->execute();
+    // Return safety keys if found.
+    if (isset($result['safety_key'])) {
+      // Each program could has many safety keys.
+      $keys = array_keys($result['safety_key']);
+      $skeys = safety_key_load_multiple($keys);
+      foreach ($skeys as $id => $key) {
+        if (api_safety_keys_expired($key)) {
+          // Hide expired SK.
+          unset($skeys[$id]);
+        }
+      }
+      return $skeys;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Implements HOOK_block_info().
+ */
+function api_safety_keys_block_info() {
+	$blocks['safety_key_program_block'] = array(
+		'info' => t('Safety Keys'),
+		'cache' => DRUPAL_NO_CACHE,
+	);
+	return $blocks;
+}
+
+/**
+ * Implements HOOK_block_view().
+ */
+function api_safety_keys_block_view($delta = '') {
+
+  $block = array();
+
+  switch ($delta) {
+  case 'safety_key_program_block':
+    $block['subject'] = t('Safety Keys');
+    $block['content'] = api_safety_keys_program_block();
+    break;
+  }
+
+  return $block;
+}
+
+/**
+ * safety_key_program_block content.
+ */
+function api_safety_keys_program_block() {
+  global $user;
+  $key_user = NULL;
+  $user_id = arg(1);
+  // Load user
+  if (!empty($user_id) && is_numeric($user_id)) {
+    $key_user = user_load($user_id);
+  }
+
+  if (empty($key_user)) {
+    $key_user = $user;
+  }
+
+  // Check user access.
+  if (user_access('admin safety keys') || $user->uid == $key_user->uid) {
+    // Default message to display.
+    $message = t('Once you have completed the Course and/or passed the Examination, you will be issued a Certification (where applicable) or API Safety Key');
+    // Link to key datail page.
+    $link = NULL;
+    // Get program ID.
+    $program_id = arg(2);
+    // Get state
+    $state = arg(3);
+    // Get operator type
+    $operator_type = str_replace(' ', '+', arg(4));
+    // Generate SK?
+    $program = api_moodle_get_program($program_id);
+    $user_purchased_items = api_moodle_user_get_purchased_items($key_user->uid, $program_id);
+    $username = $key_user->name;
+    $module = $program->modules[$state][$operator_type][0];
+    $state_rules = _api_program_get_rules($state, $operator_type);
+    // Is there a valid SK?
+    if (!empty($program_id)) {
+      // Get safety keys.
+      $keys = api_safety_keys_load_by_program($program_id, $key_user->uid);
+      $valid_keys = array();
+      $key = NULL;
+      if (!empty($keys)) {
+        foreach ($keys as $sk) {
+          // Check if the safety key is expired.
+          $expired = api_safety_keys_expired($sk);
+          if ($expired) {
+            continue;
+          } else {
+            // Is ust program?
+            if ($program->is_operator_training) {
+              $key_state = _api_custom_field_item(SAFETY_KEY_ENTITY, $sk, 'field_state', 'value');
+              $key_type = _api_custom_field_item(SAFETY_KEY_ENTITY, $sk, 'field_operator_type', 'value');
+              $key_type = str_replace(' ', '+', $key_type);
+              if ($key_state == $state && $state_rules['miscellaneous']['safety_keys'] == 2 && $operator_type == 'A+B' && ($key_type == 'A' || $key_type == 'B')) {
+                  $valid_keys[$key_type] = $sk;
+              } else if ($key_state == $state && $key_type == $operator_type) {
+                  $key = $sk;
+                  break;
+              } else {
+                continue;
+              }
+            } else {
+              // get first valid safety key.
+              $key = $sk;
+              break;
+            }
+          }
+        }
+      }
+
+      if ($state_rules['miscellaneous']['safety_keys'] == 2 && !empty($valid_keys)) {
+        // 2 SK issued
+        $message = t('You have been certificated in this individual modules with a Safety Key. Now you can view and print your certificate.');
+        $link = '';
+        foreach ($valid_keys as $type => $key) {
+            $link .= l(t('View Safety Key (Class @class)', array('@class' => $type)), 'user/' . $key_user->uid . '/safety_keys/' . $key->number . '/view');
+        }
+
+      } else if (!empty($key) && isset($key->number)) {
+        // If UST program, validate state+type.
+        // The user has a valid safety key for this program.
+        $message = t('You have been certificated in this individual modules with a Safety Key. Now you can view and print your certificate.');
+        $link = l(t('View Safety Key'), 'user/' . $key_user->uid . '/safety_keys/' . $key->number . '/view');
+      }
+    }
+
+    return theme('safety_key_program_block', array('message' => $message, 'link' => $link));
+
+  } else {
+    return FALSE;
+  }
+}
+
+/**
+ * Check if the safety key is expired.
+ */
+function api_safety_keys_expired($key) {
+  $expiration = _api_custom_field_item(SAFETY_KEY_ENTITY, $key, 'field_key_expiration_date');
+  $expiration = strtotime($expiration);
+  $current_time = time();
+  if ($expiration > $current_time) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Generate safety key.
+ */
+function api_safety_keys_generate($uid, $program_id, $type = 'NA', $state = 'NA', $force = FALSE) {
+  // Check valid uid and program.
+  $key_user = user_load($uid);
+  $program = api_moodle_get_program($program_id);
+
+  if (empty($key_user) || !$program) {
+    return FALSE;
+  }
+
+  // Check if exists a valid SK for this user/program/state/type
+  $safety_key = api_safety_keys_load($uid, $program_id, $state, $type);
+  if ($safety_key && !api_safety_keys_expired($safety_key)){
+    // TO-DO: check if the safety key needs update the expiration date
+    return $safety_key;
+  }
+  $user_purchased_items = api_moodle_user_get_purchased_items($key_user->uid, $program_id);
+  $username = $key_user->name;
+
+  $module = $program->modules[$state][str_replace(' ', '+', $type)][0];
+  if (($module[MOODLE_COURSE_TYPE_FINAL_EXAM] && array_key_exists($module[MOODLE_COURSE_TYPE_FINAL_EXAM]->product_id, $user_purchased_items)) || $force) {
+
+    if (!api_moodle_get_course_completion($module[MOODLE_COURSE_TYPE_FINAL_EXAM]->course_id, $username) && !$force){
+      return FALSE;
+    }
+
+    // Get user's company.
+    $company_nid = _get_user_company($uid);
+    $company = node_load($company_nid);
+
+    $safety_key = entity_create(SAFETY_KEY_ENTITY, array('type' => SAFETY_KEY_ENTITY));
+    $safety_key->created = time();
+    $safety_key->uid = $uid;
+    $safety_key->number = api_safety_keys_get_unique_number();
+
+    $operator_type = str_replace(' ', '+', $type);
+    $program_rules = api_program_rules_definition();
+    $user_state = _api_custom_field_item('user', $key_user, 'field_address', 'administrative_area');
+
+    if (!$program->is_operator_training && isset($program_rules[$user_state])) {
+      $state_rule = reset($program_rules[$user_state]['types']);
+      $certificate_expiration = $state_rule['certificate_expiration'];
+    } else {
+      $certificate_expiration = $program_rules[$state]['types'][$operator_type]['certificate_expiration'];
+    }
+
+    $certificate_expiration = empty($certificate_expiration) ? 10 : $certificate_expiration;
+    $certificate_expiration = '+' . $certificate_expiration . ' year';
+    // Expiration date
+    $expiration_date = date('Y-m-d H:i:s', strtotime($certificate_expiration));
+    $safety_key->field_key_expiration_date = array(LANGUAGE_NONE => array(0 => array('value' => $expiration_date)));
+    // Operator type
+    $safety_key->field_operator_type = array(LANGUAGE_NONE => array(0 => array('value' => $type)));
+    // US state
+    $safety_key->field_state = array(LANGUAGE_NONE => array(0 => array('value' => $state)));
+    // Program reference field
+    $safety_key->field_program = array(LANGUAGE_NONE => array(0 => array('target_id' => $program_id)));
+    // Company name.
+    $safety_key->field_safety_company = array(LANGUAGE_NONE => array(0 => array('value' => $company->title)));
+    entity_save(SAFETY_KEY_ENTITY, $safety_key);
+
+    // Clear Safety Keys cache.
+    cache_clear_all('api_safety_keys', 'cache', TRUE);
+    return $safety_key;
+
+  } else {
+    return FALSE;
+  }
+}
+
+/**
+ * Generates an unique safety key number.
+ *
+ * @return
+ *   A random and unique safety key number.
+ */
+function api_safety_keys_get_unique_number() {
+  // Get unavailable numbers.
+  $query = db_select(SAFETY_KEY_TABLE, 'sk');
+  $query->fields('sk', array('number'));
+  $result = $query->execute()->fetchAllKeyed(0,0);
+
+  // Generate safety key number.
+  $number = NULL;
+  do {
+    $number = rand(10000000, 99999999);
+  } while(in_array($number, $result));
+
+  return $number;
+}
+
+/**
+ * Menu callback.
+ *
+ * @param $uid
+ * 	User ID.
+ * @param $program_id
+ * 	Program key number
+ * @param $type
+ * 	Operator Type.
+ * @param $state
+ * 	State.
+ */
+function api_safety_keys_generate_key($uid, $program_id, $type, $state) {
+	$sk = api_safety_keys_generate($uid, $program_id, $type, $state);
+	if (!empty($sk)) {
+		drupal_goto('user/' . $uid . '/safety_keys/' . $sk->number . '/view');
+	} else {
+		drupal_goto('user/' . $uid . '/program/' . $program_id);
+	}
+}
+
+function api_safety_keys_user_generate_key($uid){
+  $exams = api_moodle_user_get_final_exams($uid);
+
+  $safety_key_generated = FALSE;
+  foreach ($exams as $exam) {
+  $safety_key = api_safety_keys_generate($uid, $exam->program_id, $exam->operator_type, $exam->state);
+  if ($safety_key){
+    $safety_key_generated = TRUE;
+  }
+  }
+  $object = new stdClass();
+  $object->module = 'api_safety_keys';
+  $object->message = $safety_key_generated ? 'Safety Key Generated':'Error';
+  $object->error = $safety_key_generated ? FALSE:TRUE;
+  $object->uid = $uid;
+  drupal_json_output($object);
+}
+
+function api_safety_keys_load($uid, $program_id, $state, $operator_type){
+  $operator_type = str_replace('+', ' ', $operator_type);
+  $query = new EntityFieldQuery();
+  $query = $query->entityCondition('entity_type', 'safety_key')
+        ->propertyCondition('uid', $uid);
+  if (!empty($state)) {
+    $query = $query->fieldCondition('field_state', 'value', $state, '=');
+  }
+  if (!empty($operator_type)) {
+    $operator_type = ($operator_type == 'A B') ? array('A+B', 'A B') : $operator_type;
+    $query = $query->fieldCondition('field_operator_type', 'value', $operator_type);
+  }
+  $result = $query->fieldCondition('field_program', 'target_id', $program_id, '=')
+          ->fieldOrderBy('field_key_expiration_date', 'value', 'DESC')->execute();
+  if ($result && count($result) && $result['safety_key']) {
+    $safety_key = reset($result['safety_key']);
+    return safety_key_load($safety_key->id);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+function api_moodle_user_get_final_exams($uid){
+  $exams = array();
+
+  $purchased_items = api_moodle_user_get_purchased_items($uid);
+  $product_ids = array_keys($purchased_items);
+  $products_entity = entity_load('commerce_product', $product_ids,array('status'=>1));
+
+  foreach($products_entity as $product){
+  if ($product->field_course_type[LANGUAGE_NONE][0]['value'] == 3 && $product->field_module_number[LANGUAGE_NONE][0]['value'] == 0){
+    array_push($exams, $purchased_items[$product->product_id]);
+  }
+  }
+  return $exams;
+}
+
+/**
+ * Add a link to export the safety key list.
+ */
+function api_safety_keys_preprocess_views_view(&$vars) {
+  if($vars['name'] == 'safety_keys' && $vars['display_id'] == 'customer_support_block' && $vars['view']->total_rows) {
+  $uid = $vars['view']->args[0];
+  $feed_link = l(t('Export Safety Keys'), 'admin/people/customer-support/'.$uid.'/safety-keys/xls', array('attributes' => array('class'=> 'button primary export-csv-button')));
+  $vars['header'] .= '<div class="top-buttons">' . $feed_link . '</div>';
+  }
+}
+
+/**
+ * Get all safety keys for a user.
+ *
+ * @param type $uid User ID
+ * @return Object of safety keys.
+ */
+function _get_user_safety_keys($uid){
+  $query = new EntityFieldQuery();
+  $query = $query->entityCondition('entity_type', SAFETY_KEY_ENTITY)
+        ->propertyCondition('uid', $uid);
+  $result = $query->fieldOrderBy('field_key_expiration_date', 'value', 'DESC')->execute();
+  if (isset($result['safety_key'])) {
+  $safety_keys_id = array_keys($result['safety_key']);
+  $safety_keys = safety_key_load_multiple($safety_keys_id);
+  foreach ($safety_keys as $id => $safety_key) {
+    $path = entity_uri('safety_key', $safety_key);
+    $safety_keys[$id]->path = array('title' => $safety_key->id, 'href' => $path['path'], 'attributes' => array('target'=>'_blank'));
+  }
+  return $safety_keys;
+  }
+  return array();
+}
+
+/**
+ * Get Safety Keys stats.
+ */
+function api_safety_keys_get_safety_key_satats() {
+  $safety_key_satats = &drupal_static(__FUNCTION__);
+  if (!isset($safety_key_satats)) {
+  if ($cache = cache_get(__FUNCTION__)) {
+    $safety_key_satats = $cache->data;
+  }
+  else {
+    // Get safety key stats
+    $safety_key_satats = array(
+    'total' => api_safety_keys_total_number_by_time(),
+    'total_valid' => api_safety_keys_total_number_by_time(FALSE, TRUE),
+    '30_days' => api_safety_keys_total_number_by_time(60*60*24*30, TRUE),
+    '7_days' => api_safety_keys_total_number_by_time(60*60*24*7, TRUE),
+    '24_hours' => api_safety_keys_total_number_by_time(60*60*24, TRUE),
+    'sk_users' => api_safety_keys_total_number_of_users(),
+    );
+    cache_set(__FUNCTION__, $safety_key_satats, 'cache');
+  }
+  }
+  return $safety_key_satats;
+}
+
+/**
+ * Get Total number of Safety Keys by time.
+ *
+ * @param $time
+ *   Time in seconds(FALSE: no time constraint).
+ * @param $valid
+ *   TRUE: return valid Safety Keys, FALSE: include expired Safety Keys.
+ */
+function api_safety_keys_total_number_by_time($time = FALSE, $valid = FALSE){
+  // Query to the database.
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', SAFETY_KEY_ENTITY);
+  if ($time) {
+    $current_time = time();
+    $time = $current_time - $time;
+    $query->propertyCondition('created', $time, '>=');
+  }
+  if ($valid) {
+    $now_utc = new \DateTime('now', new \DateTimeZone('UTC'));
+    $query->fieldCondition('field_key_expiration_date', 'value', $now_utc->format('Y-m-d H:i:s'), '>=');
+  }
+
+  $query->count();
+  return $query->execute();
+}
+
+/**
+ * Get total number of users with Safety Keys.
+ */
+function api_safety_keys_total_number_of_users(){
+  // Query to the database.
+  $query = db_select('eck_safety_key', 'sk');
+  $query->fields('sk', array('uid'));
+  $query->join('field_data_field_key_expiration_date', 'ed', 'sk.id = ed.entity_id');
+  $now_utc = new \DateTime('now', new \DateTimeZone('UTC'));
+  $query->condition('ed.field_key_expiration_date_value', $now_utc->format('Y-m-d H:i:s'), '>=');
+
+  $query->distinct();
+  $users = $query->execute()->fetchAll();
+  $count = count($users);
+  return $count;
+}
+
+/**
+ * Get Total number of valid Safety Keys by program.
+ *
+ * @param $porgram_nid
+ *   Porgram ID
+ * @param $count
+ *   Total number of valid safety keys.
+ */
+function api_safety_keys_total_valid_by_program($porgram_nid) {
+  // Query to the database.
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', SAFETY_KEY_ENTITY);
+  $query->fieldCondition('field_program', 'target_id', $porgram_nid);
+
+  // Return Valid Safety Keys.
+  $now = date('Y-m-d');
+  $query->fieldCondition('field_key_expiration_date', 'value', $now, '>=');
+
+  $query->count();
+  return $query->execute();
+}
+
+function api_safety_keys_init() {
+  drupal_add_js(drupal_get_path('module', 'api_safety_keys') . '/js/api_safety_keys.js');
+}

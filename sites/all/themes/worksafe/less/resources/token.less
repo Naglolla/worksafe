@@ -1,0 +1,449 @@
+/* date style */
+.wrapper-date-float() {
+  .form-type-checkbox {
+    padding: 0;
+    label {
+      font: @font-body;
+      text-decoration: underline;
+      font-weight: 300;
+      color: @main-color-soft;
+      text-transform: capitalize;
+    }
+  }  
+}
+/* new token page and edit token page */
+body.context-token,
+body.page-admin-structure-entity-type-token-entity {
+  h1 {
+    text-align: center;
+  }
+  div.tokens-help-text {
+    text-align: center;
+    font: @font-body;
+    color: @main-color-soft;
+    padding: 0 30px 50px 30px;
+    @media @small-size {
+      padding: 0 10px 50px 10px;
+    }
+  }
+  
+  #edit-line-item-fields {
+    border-bottom: 0;
+    
+    @media @middle-size {
+      .form-item:not(.form-type-checkbox) label {
+        display: block;
+        width: 100%;
+        text-align: center;
+      }
+      input:not([type="radio"]):not([type="checkbox"]),
+      div.chosen-container{
+        width: 100% !important;
+      }
+      .description {
+        margin-left: 0;
+        text-align: center;
+      }
+    }
+  }
+  
+  #edit-line-item-fields-field-token-id {
+    display: none;
+  }
+  
+
+  
+  .description {
+    @media @small-size {
+      margin-left: 0 !important;
+    }
+  }
+  
+  #line-item-fields-field-money-charged-add-more-wrapper {
+    position: relative;
+    input {
+      padding-left: 30px;
+    }
+    .field-prefix {
+      position: absolute;
+      
+      margin-top: 15px;
+      margin-left: 10px;
+      
+      color: @main-color-dark;
+      font: @font-body-button;
+      font-weight: 500;
+
+      @media @small-size {
+        left: 0;
+        margin-top: 8px;
+        font-weight: 300;
+      }
+    }
+    
+    @media @middle-size {
+      .form-item-line-item-fields-field-money-charged-und-0-value {
+        span.form-required {
+            left: -185px !important;
+            position: relative !important;
+          }
+      }
+    }
+
+    @media @small-size {
+      label {
+        display: block;
+      }
+    }
+  }
+  
+  
+  
+  
+  input#edit-submit {
+    margin-top: 60px;
+    margin-left: 15%;
+    @media @middle-size {
+      margin: 30px 10% 0 10%;
+      width: 80%;
+    }
+    @media @small-size {
+      width: 100%;
+      margin: 30px 0;
+    }
+  }
+  article.node-token {
+    .grid-8 {
+      width: 90%;
+      padding-left: 0;
+      @media @small-size {
+        width: @user-register-responsive;
+        margin: 0;
+      }
+    }
+    .form-wrapper:not(#edit-line-item-fields) {
+      width: @user-register-width;
+      margin:auto;
+      @media @small-size {
+        width: @user-register-responsive;
+      }
+    }
+  }
+  #line-item-fields-field-date-from-to-add-more-wrapper,
+  #field-token-entity-date-from-to-add-more-wrapper {
+    fieldset.form-wrapper, .fieldset-wrapper {
+      border-bottom: none;
+      width: 100% !important;
+      legend {
+        margin-left: 0;
+        padding: 0;
+      }
+      span.fieldset-legend {
+        font: @font-body-button;
+        font-weight: 500;
+        text-transform: capitalize;
+        display: none;
+      }
+      .container-inline-date {
+        width: 100%;
+        .form-type-date-popup {
+          margin-right: 0;
+          .date-padding {
+            width: 100%;
+            padding: 0;
+            input {
+              display: inline-block;
+              margin: 0;
+            }
+          }
+        }
+      }
+      .end-date-wrapper {
+        div.form-item > label[for=edit-line-item-fields-field-date-from-to-und-0-value2],
+        div.form-item > label[for=edit-field-token-entity-date-from-to-und-0-value2]{
+          display: none;
+        }
+      }
+      .date-float {
+        .wrapper-date-float();
+      }
+    }
+  }
+}
+/* Edit token page */
+body.page-admin-structure-entity-type-token-entity {
+  #region-content {
+    div.content {
+      width: 90%;
+      margin: auto;
+      @media @small-size {
+        width: 100%;
+      }
+    }
+    #field-token-entity-date-from-to-add-more-wrapper {
+      width: @user-register-width;
+      margin:auto;
+      .form-type-date-popup {
+        width: 100% !important;
+      }
+      @media @small-size {
+        width: @user-register-responsive;
+      }
+    }
+    #eck-entity-form-edit-token-entity-token-entity-bundle > div {
+      border-bottom: 0;
+      > div {
+        margin-top: 1em;
+        margin-bottom: 1em;  
+      }
+    }
+    #edit-actions {
+      width: 90%;
+      margin: auto;
+      border-top: 2px solid @main-color-dark;
+      @media @small-size {
+        width: 100%;
+      }
+    }
+    .form-item {
+      width: @user-register-width !important;
+      margin:auto;
+      @media @small-size {
+        width: @user-register-responsive !important;
+      }
+    }
+    .date-float {
+      .wrapper-date-float();
+      .form-type-checkbox {
+        width: 100% !important;
+        margin-top: 1em;
+        margin-bottom: 1em;
+      }
+    }
+    .date-no-float {
+      .form-item {
+          width: 100% !important;
+          margin-bottom: 10px;
+      }
+    }
+    input#edit-submit {
+        margin-left: 10%;
+        @media @small-size {
+            margin-left: 0;
+        }
+    }
+  }
+}
+
+/* list token page */
+body.page-user-tokens, body.page-admin-company-tokens {
+  #region-content {
+    div.content {
+      width: 90%;
+      margin: auto;
+      @media @small-size {
+        width: 100%;
+      }
+    }
+    div.new_token {
+      margin-bottom: 35px;
+      text-align: right;
+      a.button {
+        @media @small-size {
+          width: 100%;
+          padding: 5px 0;
+        }
+      }
+    }
+    div.feed-icon {
+      display: none;
+    }
+    a#tokens-export-link {
+      .button;
+      .button.primary;
+      @media @small-size {
+        width: 100%;
+        padding: 5px 0;
+        margin-top: 30px;
+      }
+    }
+  }
+  .view-tokens-list, .view-company-admin-tokens-list {
+    th, td {
+      text-align: center;
+      &:first-child {
+        padding-left: 10px;
+      }
+      &:last-child {
+        padding-right: 10px;
+      }
+    }
+    td a {
+      display: block;
+      text-transform: capitalize;
+      margin-bottom: 15px;
+      line-height: 18px;
+    }
+    th a {
+      white-space: nowrap;
+      font: @font-body-table !important;
+      font-weight: 700 !important;
+      img {
+        margin-bottom: 6px;
+      }
+    }
+    span {
+      &.token-enabled {
+        display: block;
+        background: url("@{images}/checkbox-checked.png") no-repeat;
+        height: 21px;
+        width: 20px;
+        margin: auto;
+      }
+      &.token-disabled {
+        display: block;
+        background: url("@{images}/checkbox.png") no-repeat;
+        height: 21px;
+        width: 20px;
+        margin: auto;
+      }
+    }
+    .item-list {
+      ul, li {
+        margin: 0;
+      }
+      @media @small-size {
+        float: none;
+      }
+    }
+    .field-name-field-entity-token-fixed-percent, 
+    .field-name-field-entity-tokendiscount-value {
+      display: inline;
+      div {
+        display: inline;
+      }
+    }
+  }
+}
+/* only company admin token list */
+body.page-admin-company-tokens {
+  .views-exposed-widgets {
+    width: 70%;
+    margin: auto;
+    padding-bottom: 20px;
+    @media @small-size {
+      width: 100%;
+    }
+    /* form */
+    #edit-field-token-entity-id-value-wrapper {
+      float: none;
+      padding: 0;
+      label {
+        font: @font-body-button;
+        font-weight: 500;
+        position: relative;
+        text-transform: capitalize;
+        vertical-align: middle;
+        display: inline-block;
+        width: 30%;
+        @media @small-size {
+          width: 100%;
+          text-align: center;
+        }
+      }
+      div.views-widget {
+        width: 67% !important;
+        vertical-align: middle;
+        display: inline-block;
+        input {
+          width: 100% !important;
+        }
+        @media @small-size {
+          width: 100% !important;
+        }
+      }
+    }
+    /*button*/
+    .views-submit-button {
+      float: none;
+      padding: 0;
+      input {
+        margin-top: 1em;
+          @media @small-size {
+          width: 100%;
+        }
+      }
+    }
+  }
+  /* empty result */
+  .view-empty {
+    color: @main-color-dark;
+    font: @font-body-button;
+    font-weight: 500;
+    text-align: center;
+    background: @main-color-light;
+    margin: 50px auto;
+    padding: 40px;
+    width: 63%;
+    p {
+      margin-bottom: 0;
+    }
+  }
+}
+
+/* detail token page */
+body.page-token-entity {
+  div.entity-token-entity {
+    .content {
+      width: 70%;
+      margin: auto;
+      color: @main-color-dark;
+      
+      //padding: 40px 30px;
+      .box-sizing(border-box);
+      .field:not(.field-name-field-token-entity-load-amount-link) {
+        background: @main-color-light;
+        padding-left: 30px;
+        padding-right: 30px;
+      }
+      .field-name-field-token-entity-id,
+      .field-name-field-token-entity-load-amount-link {
+        padding-top: 40px;
+      }
+      .field-name-field-token-entity-author {
+        padding-bottom: 40px;
+      }
+      h1 {
+        display: none;
+      }
+      div.field { 
+        div {
+          display: inline;
+          padding-bottom: 5px;
+          font: @font-body-button;
+          font-weight: 500;
+          color: @main-color-dark;
+          line-height: 32px;
+        }
+        .field-items div {
+          font: @font-body-button;
+          font-weight: 300;
+        }
+      }
+
+      .field-name-field-token-entity-programs,
+      .field-name-field-token-entity-states,
+      .field-name-field-token-entity-companies {
+        .field-items div {
+          display: block;
+          padding-left: 40px;
+          font-weight: 300;
+        }
+      }
+      @media @small-size {
+        padding: 20px;
+        width: 100%;
+      }
+    }
+  }
+}

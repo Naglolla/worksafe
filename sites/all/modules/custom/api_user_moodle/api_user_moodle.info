@@ -1,0 +1,6 @@
+name = API User Moodle
+description = API Users' Moodle sync.
+dependencies[] = moodle_connector
+package = API Custom
+version = VERSION
+core = 7.x

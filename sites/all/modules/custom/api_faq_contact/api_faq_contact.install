@@ -1,0 +1,236 @@
+<?php
+/**
+ * @file
+ * Provides custom functionality for API FAQ Contact.
+ */
+
+/**
+ * Implements hook_install.
+ */
+function api_faq_contact_install() {
+//  $node = new stdClass();
+//  $node->type = 'webform';
+//  node_object_prepare($node);
+//  $node->title = 'Contact Us';
+//  $node->language = 'en';
+//  $node->body[LANGUAGE_NONE][0]['value']   = '';
+//  $node->body[LANGUAGE_NONE][0]['format']  = 'full_html';
+//  $node->uid = 1;
+//  $node->promote = 0;
+//  $node->comment = 0;
+//
+//  // Create the webform components.
+//  $components = array(
+//  array(
+//    'name' => 'Name',
+//    'form_key' => 'name',
+//    'type' => 'textfield',
+//    'mandatory' => 1,
+//    'weight' => 0,
+//    'pid' => 0,
+//    'extra' => array(
+//      'title_display' => 'inline',
+//      'private' => 0,
+//    ),
+//  ),
+//  array(
+//    'name' => 'Email address',
+//    'form_key' => 'email_address',
+//    'type' => 'email',
+//    'mandatory' => 1,
+//    'weight' => 1,
+//    'pid' => 0,
+//    'extra' => array(
+//      'title_display' => 'inline',
+//      'private' => 0,
+//    ),
+//  ),
+//  array(
+//    'name' => 'Telephone Number',
+//    'form_key' => 'telephone',
+//    'type' => 'textfield',
+//    'mandatory' => 0,
+//    'weight' => 2,
+//    'pid' => 0,
+//    'extra' => array(
+//      'title_display' => 'inline',
+//      'private' => 0,
+//    ),
+//  ),
+//  array(
+//    'name' => 'Company',
+//    'form_key' => 'company',
+//    'type' => 'select',
+//    'mandatory' => 0,
+//    'weight' => 3,
+//    'pid' => 0,
+//    'extra' => array(
+//      'title_display' => 'inline',
+//      'private' => 0,
+//      'items' => "",
+//      'aslist' => 1,
+//    ),
+//  ), 
+//  array(
+//    'name' => 'Subject',
+//    'form_key' => 'subject',
+//    'type' => 'textarea',
+//    'mandatory' => 1,
+//    'weight' => 4,
+//    'pid' => 0,
+//    'extra' => array(
+//      'title_display' => 'inline',
+//      'private' => 0,
+//      ),
+//  ),
+//  array(
+//    'name' => 'Message / Problem',
+//    'form_key' => 'message',
+//    'type' => 'textarea',
+//    'mandatory' => 1,
+//    'weight' => 5,
+//    'pid' => 0,
+//    'extra' => array(
+//      'title_display' => 'inline',
+//      'private' => 0,
+//      ),
+//  ),
+//  array(
+//    'name' => 'Program',
+//    'form_key' => 'program',
+//    'type' => 'select',
+//    'mandatory' => 0,
+//    'weight' => 6,
+//    'pid' => 0,
+//    'extra' => array(
+//      'title_display' => 'inline',
+//      'private' => 0,
+//      'items' => "",
+//      'aslist' => 1,
+//    ),
+//  ), 
+//  array(
+//    'name' => 'Mandatory Fields',
+//    'form_key' => 'mandatory_fields',
+//    'type' => 'markup',
+//    'mandatory' => 0,
+//    'weight' => 7,
+//    'pid' => 0,
+//    'value' => '<p>Fields with * are mandatory</p>',
+//    'extra' => array(
+//      'title_display' => 'inline',
+//      'private' => 0,
+//      'format'=> 'full_html',
+//      ),
+//    ),
+//  );
+//
+//  // Setup notification email.
+//  $emails = array(
+//    array(
+//      'email' => 'worksafeapi@api.org',
+//      'subject' => 'default',
+//      'from_name' => 'default',
+//      'from_address' => 'default',
+//      'template' => 'default',
+//      'excluded_components' => array(),
+//    ),
+//  );
+//
+//  // Attach the webform to the node.
+//  $node->webform = array(
+//    'confirmation' => '',
+//    'confirmation_format' => NULL,
+//    'redirect_url' => '<confirmation>',
+//    'status' => '1',
+//    'block' => '1',
+//    'teaser' => '0',
+//    'allow_draft' => '0',
+//    'auto_save' => '0',
+//    'submit_notice' => '1',
+//    'submit_text' => '',
+//    'submit_limit' => '-1',
+//    'submit_interval' => '-1',
+//    'total_submit_limit' => '-1',
+//    'total_submit_interval' => '-1',
+//    'record_exists' => TRUE,
+//    'roles' => array(
+//      0 => '1',
+//    ),
+//    'emails' => $emails,
+//    'components' => $components,
+//  );
+//
+//  // Save the node.
+//  node_save($node);
+//  variable_set('api_contact_form_id', $node->nid);
+//  
+//  api_faq_contact_add_captcha($node->nid);
+//  api_faq_contact_configure_contact_block($node->nid);
+  
+  api_faq_contact_set_default_content();
+  
+  // Enable by default Contact form.
+  variable_set('api_faq_contact_form_status', 1);
+  
+}
+
+/**
+ * Adds the captcha validation to the Contact Form
+ */
+//function api_faq_contact_add_captcha($contact_form_id) {
+//  // Add Captcha to Contact WebForm.
+//  module_load_include('inc', 'captcha');
+//  $captcha_point_form_id = 'webform_client_form_' . $contact_form_id;
+//  $captcha_type = 'default';
+//  captcha_set_form_id_setting($captcha_point_form_id, $captcha_type);
+//}
+
+/**
+ *  Adds the Contact WebForm Block in the Help & FAQ Page.
+ */
+//function api_faq_contact_configure_contact_block($contact_form_id) {
+//  // Add Contact WebForm in Help & FAQ Page.
+//  $help_faq_nid = variable_get('api_help_and_faq_nid', FALSE);
+//  if ($help_faq_nid) {
+//    $pages = 'help-faq-page';
+//    db_update('block')
+//      ->fields(array(
+//          'status' => 1,
+//          'region' => 'content',
+//      ))
+//      ->condition('module', 'webform', '=')
+//      ->condition('delta', 'client-block-' . $contact_form_id, '=')
+//      ->condition('theme', 'worksafe', '=')
+//    ->execute();
+//    db_update('block')
+//      ->fields(array(
+//          'pages' => $pages,
+//          'visibility' => 1
+//      ))
+//      ->condition('module', 'webform', '=')
+//      ->condition('delta', 'client-block-' . $contact_form_id, '=')
+//    ->execute();
+//  }
+//}
+
+/**
+ * Function to set a default text content for HELP $ FAQ Page.
+ */
+function api_faq_contact_set_default_content() {
+$str = <<<EOD
+<div class='fqa-content'><span class='span-title'>Credit Card, Payment Problems, Receipts or Refunds</span>
+<span class='span-content'>Please note that the API WorkSafe system does not accept the Discovery Card. To contact Customer Support click on HELP or call 202-682-8469.</span></div>
+<div class='fqa-content'><span class='span-title'>If I'm in the middle of the exam and my internet connection is lost, or I logged off, will I have to start the exam over?</span>
+<span class='span-content'>Once a module is completed that information is saved and the user will be able to start on the next module. If a user is in the middle of a module and the computer disconnects from the internet, or the user logs off the website, they will have to take the incomplete module over again. If a user is in the middle of an exam module and the computer disconnects from the internet, or the user logs off the website, that exam will be marked as failed when the user logs on next. To start your exam where you left off, users should contact Customer Support click on HELP or call 202-682-8469.</span></div>
+<div class='fqa-content'><span class='span-title'>How do I reprint my Safety Key/Certificate?</span>
+<span class='span-content'>API WorkSafe allows you to reprint your Safety Key/Certificate as many times as you wish. To do so, please log into the system, and view your valid safety keys in your ACCOUNT. To contact Customer Support click on HELP or call 202-682-8469.</span></div>
+<div class='fqa-content'><span class='span-title'>Company Administrator Accounts</span>
+<span class='span-content'>Each company in the WorkSafe system may assign an individual as the company administrator to manage their user's accounts. Company administrators have the ability to see users registered to their company and make a bulk purchase for the company by acquiring a token; and at that time they will be given a token ID. The employees may then use the Token ID rather than pay for their purchases individually with a credit card, thus sparing the company the hassle of having to reimburse employees individually. In order to become a company administrator, it is not necessary for this person to take the test or obtain a Safety Key/Certificate. The designated company administrator simply needs to create an account and contact Customer Support. Click on HELP or call 202-682-8469.</span></div>
+<div class='fqa-content'><span class='span-title'>Companies with Multiple Locations</span>
+<span class='span-content'>Our company has its headquarters in Houston, TX but I work in a facility in Homa, LA, how do I register? When you register select your company headquarters in the Company section and then select/enter your facility location as the secondary option. This allows a company with multiple locations to have multiple administrators. Keep in mind though, that when company tokens are purchased they are tied to a company and/or facility and only the people who are registered to the company and/or facility that the token was purchased for will be able to use the funds from that token. To contact Customer Support click on HELP or call 202-682-8469.</span></div>
+EOD;
+
+  // Save the content in DB.
+  variable_set('api_help_and_faq_content', $str);
+}

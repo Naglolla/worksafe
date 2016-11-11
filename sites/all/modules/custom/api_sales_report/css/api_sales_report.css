@@ -1,0 +1,33 @@
+#report-filters-container .container-inline-date,
+#report-filters-container .form-item-payment-method,
+#report-filters-container .form-item-payment-status,
+#report-filters-container .form-item-program {
+  float: left;
+  margin: 0px 10px;
+}
+.container-inline-date .date-padding {
+  padding: 0;
+}
+#statistics-container {
+  padding: 20px;
+}
+#statistics-container .summary-report .stats {
+  float: left;
+  padding: 0px 5%;
+  width: 23%;
+  box-sizing: content-box;
+  -webkit-box-sizing: content-box;
+  -moz-box-sizing: content-box;
+}
+#statistics-container .summary-report .stats .field .field-label {
+  display: inline;
+  margin-right: 10px;
+}
+#statistics-container .summary-report .stats .field .field-items {
+  display: inline;
+}
+#statistics-container .summary-report .info {
+  width: 100%;
+  float: left;
+  margin-top: 40px;
+}

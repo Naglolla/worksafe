@@ -1,0 +1,271 @@
+<?php
+
+/**
+ * @file
+ * API logging for administrators.
+ *
+ * The API Logs module keeps a list of recorded events related to API.
+ *  - User created by API Employees
+ *  - Programs purchased.
+ *  - Token created.
+ *  - Funds added to Tokens.
+ *
+ * @see api_logs_record()
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function api_logs_menu() {
+  $items['admin/config/api/api-logs'] = array(
+    'title' => 'API Logs',
+    'description' => 'View API site events.',
+    'access arguments' => array('access administration pages'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_logs_records_list'),
+    'file' => 'api_logs.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/config/api/api-logs/record/%'] = array(
+    'title' => 'API Log Record Details',
+    'page callback' => 'api_logs_event_details',
+    'page arguments' => array(5),
+    'access arguments' => array('access administration pages'),
+    'file' => 'api_logs.admin.inc',
+  );
+  $items['admin/config/api/api-logs/logs'] = array(
+    'title' => 'API Logs',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['admin/config/api/api-logs/settings'] = array(
+    'title' => 'Settings',
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('api_logs_settings'),
+    'file' => 'api_logs.admin.inc',
+    'access arguments' => array('access administration pages'),
+  );
+  
+  return $items;
+}
+
+/**
+ * 
+ * Main function.
+ * Record an API Event.
+ * 
+ * @param string $type. Type of event (new user, deleted user, token purchased, promo code applied, etc..)
+ * @param string $main_id. Ex: If new users log. Main ID = john.good.
+ * @param string $message. Brief description of type of event (for overview list).
+ * @param array  $variables: Additional information. Ex: New User. Variables = $user object.
+ * 
+ */
+function api_logs_record($type, $main_id, $message, $variables = array()) {
+  if (!isset($type) || !isset($main_id) || !isset($message)) {
+    drupal_set_message('API Logs: Undefined variables while attemping to record action', 'error');
+    return;
+  }
+  global $user;
+  db_query(
+    "INSERT INTO {api_logs} (date, type, author, main_id, message, variables) VALUES(:date, :type, :author, :main_id, :message, :variables)", 
+    array(
+      ':date' => REQUEST_TIME, 
+      ':type' => $type, 
+      ':author' => serialize(array('name' => $user->name, 'uid' => $user->uid)), 
+      ':main_id' => serialize($main_id), 
+      ':message' => truncate_utf8($message, 128),
+      ':variables' => serialize($variables),
+    )
+  );
+}
+
+/**
+ * Implements hook_user_insert().
+ * Record in API Logs about new accounts.
+ */
+function api_logs_user_insert(&$edit, $account, $category) {
+  global $user;
+  $roles = array_intersect(array('administrator', 'customer support', 'company admin'), $user->roles);
+  if (!empty($roles)) {
+    $main_id =  array('id' => $account->uid, 'title' => $account->name);
+    $message = t("New account created by user:") . ' ' .  $user->name;
+    $variables = array(
+      'name' => $account->name,
+      'mail' => $account->mail,
+      'first_name' => $account->field_first_name[LANGUAGE_NONE][0]['value'],
+      'last_name' => $account->field_last_name[LANGUAGE_NONE][0]['value'],
+    );
+    api_logs_record('new account', $main_id, $message, $variables);
+  }
+}
+
+/**
+ * Implements hook_commerce_checkout_complete().
+ * Record in API Logs about programs purchased in orders.
+ */
+function api_logs_commerce_checkout_complete($order) {
+  global $user;
+  $variables = array('programs' => array());
+  $ow = entity_metadata_wrapper('commerce_order', $order);
+  foreach ($ow->commerce_line_items as $line_item) {
+    // Load line item
+    $line_item_id = $line_item->line_item_id->value();
+    $line_item_entity = commerce_line_item_load($line_item_id);
+    $product_entity = $line_item->commerce_product->value();
+    // Check for program
+    if (isset($line_item_entity->data['program_nid'])) {
+      $program_name = api_moodle_get_program_name($line_item_entity->data['program_nid']);
+      $variables['programs'][] = $program_name . ' - ' . $product_entity->title;
+      $order_with_programs = TRUE;
+    }
+  }
+  if ($order_with_programs) {
+    $main_id = array('id' => $order->order_number, 'title' => 'Order ID: ' . $order->order_number);
+    $message = t("New programs purchased by user: ") . $user->name;
+    api_logs_record('program purchase', $main_id, $message, $variables);
+  }
+}
+
+/*
+ * Implements hook_entity_presave().
+ * Record in API Logs when new tokens are created or funds added.
+ */
+function api_logs_entity_presave($entity, $type) {
+  if ($type == 'token_entity') {
+    global $user;
+    $roles = array_intersect(array('administrator', 'customer support', 'company admin'), $user->roles);
+    // Just register for API users.
+    if (empty($roles)) {
+      return;
+    }
+    $token = entity_metadata_wrapper('token_entity', $entity);
+    $token_code = $token->field_token_entity_id->value();
+    $main_id = array('id' => $token_code, 'title' => 'Token: ' . $token_code);
+    
+    $variables = array(
+      'token_code' => $token_code,
+    ); 
+    // New Token.
+    if($entity->is_new) {
+      $message = t("New Token created by user:") . ' ' .  $user->name;
+      $variables['money_amount'] = $token->field_token_entity_money_charged->value();
+      
+      $discount = $token->field_entity_tokendiscount_value->value();
+      if ($discount) {
+        if ($token->field_entity_token_fixed_percent->value() == 1) {
+          $variables['discount_type'] = 'Fixed';
+        } elseif($token->field_entity_token_fixed_percent->value() == 2) {
+          $variables['discount_type'] = 'Percentage';
+        }
+        $variables['discount_value'] = $discount;
+      }
+      
+      $companies = $token->field_token_entity_companies->value();
+      if ($companies) {
+        $variables['companies'] = array();
+        foreach ($companies as $company) {
+          $variables['companies'][] = $company->title;
+        }
+      }
+      if ($token->field_token_entity_states->value()) {
+        $variables['applicable_states'] = $token->field_token_entity_states->value();
+      }
+      $programs = $token->field_token_entity_programs->value();
+      if ($programs) {
+        $variables['field_applicable_programs'] = array();
+        foreach ($programs as $program) {
+          $variables['field_applicable_programs'][] = $program->title;
+        }
+      }
+    // Adding funds to existing token.
+    } else {
+      $original_token = reset(entity_load(TOKEN_ENTITY, array($entity->id),array('type' => TOKEN_ENTITY_BUNDLE)));
+      $message = t("Token modified by user:") . ' ' .  $user->name;
+      $variables = array(
+        'token_id' => $entity->id,
+        'original_money_charged' => $original_token->field_token_total_value[LANGUAGE_NONE][0]['value'],
+      );
+      // Register if balance was changed.
+      if ($original_token->field_token_entity_money_charged[LANGUAGE_NONE][0]['value'] != $token->field_token_entity_money_charged->value()) {
+        $variables['current_money_available_before_change'] = $original_token->field_token_entity_money_charged[LANGUAGE_NONE][0]['value'];
+        $variables['new_total_amount'] = $token->field_token_entity_money_charged->value();
+        $variables['changes_to_balance'] = 'Yes';
+      } else {
+        $variables['current_money_available'] = $original_token->field_token_entity_money_charged[LANGUAGE_NONE][0]['value'];
+        $variables['changes_to_balance'] = 'No';
+      }
+      
+      // Register if discount type changed.
+      if ($original_token->field_entity_token_fixed_percent[LANGUAGE_NONE][0]['value'] != $token->field_entity_token_fixed_percent->value()) {
+        $variables['discount_type_changed_to'] = $token->field_entity_token_fixed_percent->label();
+      }
+      
+      // Register if discount changed.
+      if ($original_token->field_entity_tokendiscount_value[LANGUAGE_NONE][0]['value'] != $token->field_entity_tokendiscount_value->value()) {
+        $variables['discount_amount_old'] = $original_token->field_entity_tokendiscount_value[LANGUAGE_NONE][0]['value'];
+        $variables['discount_amount_new'] = $token->field_entity_tokendiscount_value->value();
+      }
+    }
+    $variables['notes'] = $token->field_token_notes->value();
+
+    api_logs_record('token management', $main_id, $message, $variables);
+  }
+}
+
+/*
+ * Implementes hook_entity_delete.
+ * Record in API Logs when a token is deleted.
+ */
+function api_logs_entity_delete($entity, $type) {
+  if ($type == 'token_entity') {
+    global $user;
+    $message = t("Token deleted by user:") . ' ' .  $user->name;
+    $token_code = $entity->field_token_entity_id[LANGUAGE_NONE][0]['value'];
+    $main_id = array('id' => $entity->id, 'title' => 'Token: ' . $token_code);
+    $variables = array(
+      'token_id' => $entity->id,
+      'token_code' => $token_code,
+      'original_money_charged' => $entity->field_token_total_value[LANGUAGE_NONE][0]['value'],
+      'current_money_available' => $entity->field_token_entity_money_charged[LANGUAGE_NONE][0]['value'],
+      'deleted_by' => $user->name,
+    );
+    api_logs_record('token deleted', $main_id, $message, $variables);
+  }
+}
+
+/**
+ * Implements hook_course_quiz_unblocked_alter().
+ * Record in API Logs when a quiz is unblocked.
+ */
+function api_logs_course_quiz_unblocked_alter($account, $course_params, $product_info) {
+  global $user;
+  $main_id = array('id' => '', 'title' => $product_info->title . ' - ' . $account->name);
+  $message = t("Quiz unbloqued by user:") . ' ' .  $user->name;
+  $variables = array(
+    'quiz_user_name' => $account->name,
+    'quiz_user_mail' => $account->mail,
+    'state' => $course_params->state,
+    'type' => $course_params->type,
+    'program_name' => $course_params->program_name,
+    'module' => $product_info->title,
+    'quiz_unblocked_by' => $user->name,
+  );
+  api_logs_record('quiz unblocked', $main_id, $message, $variables);
+}
+
+/*
+ * Implements hook_cron().
+ */
+function api_logs_cron() {
+  $db_max = variable_get('api_logs_max_records', 50000);
+  $count = db_query("SELECT count (*) FROM {api_logs}")->fetchField();
+  if ($count > $db_max) {
+    $db_remove = variable_get('api_logs_amount_to_remove', 10000);
+    // We don't need to backup before removing. DB backup is performed by client.
+    db_query(
+      "DECLARE @X int SET @X=:count-0" .
+      "DELETE {api_logs} WHERE lid IN (SELECT TOP(@x) lid FROM {api_logs} ORDER BY lid ASC)", 
+      array(':count' => $db_remove)
+    );
+  }
+}
